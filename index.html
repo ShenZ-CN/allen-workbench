@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Allen 外贸提成工作台</title>
+<style>
+  :root{
+    --blue:#2563eb; --blue-d:#1e40af; --bg:#f5f7fa; --card:#ffffff; --line:#e5e9f0;
+    --txt:#1f2937; --sub:#6b7280; --red:#dc2626; --green:#16a34a; --orange:#d97706;
+    --purple:#7c3aed; --teal:#0d9488;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:var(--bg);color:var(--txt);font-size:15px;line-height:1.55;
+    padding-bottom:calc(72px + env(safe-area-inset-bottom));
+  }
+  /* ---------- 顶栏 ---------- */
+  header{
+    background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;
+    padding:18px 16px 14px;
+  }
+  header h1{font-size:19px;font-weight:700;display:flex;align-items:center;gap:8px;}
+  header .sub{font-size:12px;opacity:.85;margin-top:2px;}
+  .databar{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+  .dbtn{
+    background:rgba(255,255,255,.16);color:#fff;border:1px solid rgba(255,255,255,.35);
+    border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer;min-height:36px;
+    display:inline-flex;align-items:center;gap:5px;
+  }
+  .dbtn:hover{background:rgba(255,255,255,.28);}
+  /* ---------- PC 顶部 Tab ---------- */
+  .tabs-pc{display:none;background:var(--card);border-bottom:1px solid var(--line);
+    padding:0 16px;gap:4px;position:sticky;top:0;z-index:20;}
+  .tabs-pc button{
+    border:none;background:none;padding:14px 16px;font-size:15px;cursor:pointer;
+    color:var(--sub);border-bottom:3px solid transparent;font-weight:500;
+  }
+  .tabs-pc button.on{color:var(--blue);border-bottom-color:var(--blue);font-weight:700;}
+  /* ---------- 主区 ---------- */
+  main{max-width:1080px;margin:0 auto;padding:16px;}
+  .tabpage{display:none;}
+  .tabpage.on{display:block;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:16px;margin-bottom:16px;box-shadow:0 1px 3px rgba(16,24,40,.04);}
+  .card h2{font-size:16px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+  .card h2 .ic{flex:0 0 auto;}
+  .muted{color:var(--sub);font-size:12.5px;}
+  /* ---------- 今天要处理 ---------- */
+  .focus-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;
+    background:#f8fafc;border:1px solid var(--line);margin-bottom:8px;flex-wrap:wrap;}
+  .focus-item.overdue{background:#fef2f2;border-color:#fecaca;}
+  .focus-item .txt{flex:1;min-width:180px;font-size:14px;}
+  .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:99px;font-weight:600;margin-right:6px;}
+  .tag.red{background:#fee2e2;color:var(--red);}
+  .tag.blue{background:#dbeafe;color:var(--blue-d);}
+  .tag.orange{background:#fef3c7;color:var(--orange);}
+  .tag.green{background:#dcfce7;color:var(--green);}
+  .tag.purple{background:#ede9fe;color:var(--purple);}
+  .btn{
+    border:none;border-radius:8px;padding:9px 14px;font-size:13.5px;cursor:pointer;
+    min-height:44px;font-weight:600;display:inline-flex;align-items:center;gap:6px;justify-content:center;
+  }
+  .btn-p{background:var(--blue);color:#fff;}
+  .btn-p:hover{background:var(--blue-d);}
+  .btn-g{background:#eef2f7;color:var(--txt);border:1px solid var(--line);}
+  .btn-r{background:#fee2e2;color:var(--red);}
+  .btn-sm{min-height:36px;padding:6px 12px;font-size:12.5px;}
+  /* ---------- KPI ---------- */
+  .kpi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+  .kpi{border-radius:12px;padding:14px;color:#fff;position:relative;overflow:hidden;}
+  .kpi .num{font-size:22px;font-weight:800;margin-top:4px;word-break:break-all;}
+  .kpi .lab{font-size:12.5px;opacity:.92;font-weight:600;}
+  .kpi.k1{background:linear-gradient(135deg,#2563eb,#60a5fa);}
+  .kpi.k2{background:linear-gradient(135deg,#0d9488,#34d399);}
+  .kpi.k3{background:linear-gradient(135deg,#7c3aed,#a78bfa);}
+  .kpi.k4{background:linear-gradient(135deg,#d97706,#fbbf24);}
+  /* ---------- 列表条目 ---------- */
+  .item{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:#fff;}
+  .item .head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;}
+  .item .head b{font-size:15px;}
+  .item .meta{font-size:12.5px;color:var(--sub);display:flex;flex-wrap:wrap;gap:4px 14px;}
+  .item .nums{display:grid;grid-template-columns:repeat(2,1fr);gap:6px 12px;margin-top:8px;
+    background:#f8fafc;border-radius:10px;padding:10px 12px;font-size:12.5px;}
+  .item .nums div span{color:var(--sub);}
+  .item .nums div b{display:block;font-size:14px;}
+  .item .ops{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
+  /* ---------- 表单 ---------- */
+  label.f{display:block;font-size:13px;font-weight:600;margin:10px 0 4px;color:#374151;}
+  input[type=text],input[type=number],input[type=date],input[type=email],select,textarea{
+    width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:9px;font-size:16px;
+    background:#fff;color:var(--txt);font-family:inherit;
+  }
+  input:focus,select:focus,textarea:focus{outline:2px solid #bfdbfe;border-color:var(--blue);}
+  .fgrid{display:grid;grid-template-columns:1fr;gap:0 14px;}
+  .calcbar{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 12px;
+    font-size:13px;margin-top:12px;color:#1e40af;line-height:1.8;}
+  /* ---------- 弹窗 ---------- */
+  .mask{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:90;display:none;}
+  .mask.on{display:block;}
+  .modal{position:fixed;inset:0;z-index:99;display:none;overflow-y:auto;padding:20px 12px 60px;}
+  .modal.on{display:block;}
+  .modal-box{background:#fff;border-radius:16px;max-width:640px;margin:0 auto;padding:18px 16px 24px;}
+  .modal-box h3{font-size:17px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;}
+  .x{border:none;background:#f1f5f9;border-radius:8px;width:36px;height:36px;font-size:16px;cursor:pointer;color:var(--sub);}
+  /* ---------- 艾森豪威尔 ---------- */
+  .quad{display:grid;grid-template-columns:1fr;gap:10px;}
+  .q{border-radius:12px;padding:12px;border:1px solid var(--line);}
+  .q h4{font-size:13.5px;margin-bottom:8px;}
+  .q1{background:#fef2f2;border-color:#fecaca;} .q1 h4{color:var(--red);}
+  .q2{background:#eff6ff;border-color:#bfdbfe;} .q2 h4{color:var(--blue-d);}
+  .q3{background:#fffbeb;border-color:#fde68a;} .q3 h4{color:var(--orange);}
+  .q4{background:#f8fafc;} .q4 h4{color:var(--sub);}
+  .todo{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);
+    border-radius:9px;padding:8px 10px;margin-bottom:6px;font-size:13.5px;}
+  .todo .t{flex:1;min-width:120px;}
+  .todo .due{font-size:11px;color:var(--sub);}
+  .todo .due.od{color:var(--red);font-weight:700;}
+  .chk{width:26px;height:26px;border-radius:8px;border:2px solid #cbd5e1;background:#fff;cursor:pointer;
+    flex:0 0 auto;display:flex;align-items:center;justify-content:center;}
+  .chk:hover{border-color:var(--green);}
+  .todo-add{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:12px;}
+  .todo-add .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  /* ---------- 汇率 ---------- */
+  .fx-frame{width:100%;height:340px;border:1px solid var(--line);border-radius:12px;background:#fff;}
+  /* ---------- 图表 ---------- */
+  .chart-wrap{overflow-x:auto;}
+  .legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;margin-top:10px;}
+  .legend span{display:inline-flex;align-items:center;gap:6px;color:var(--sub);}
+  .dot{width:10px;height:10px;border-radius:3px;display:inline-block;}
+  /* ---------- 底部 Tab（移动端） ---------- */
+  .tabs-m{position:fixed;left:0;right:0;bottom:0;z-index:50;background:#fff;
+    border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom);}
+  .tabs-m button{flex:1;border:none;background:none;padding:8px 0 10px;font-size:11px;color:var(--sub);
+    cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;min-height:56px;}
+  .tabs-m button.on{color:var(--blue);font-weight:700;}
+  /* ---------- 备份提示 ---------- */
+  .banner{background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:12px;
+    padding:10px 14px;font-size:13px;margin-bottom:16px;display:none;align-items:center;gap:8px;flex-wrap:wrap;}
+  .banner.on{display:flex;}
+  .empty{color:var(--sub);font-size:13.5px;text-align:center;padding:18px 0;}
+  .revrow{display:grid;grid-template-columns:70px 1fr 1fr 1.4fr 36px;gap:6px;margin-bottom:6px;align-items:center;}
+  .sec-add{margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;}
+  .sec-add h2{margin-bottom:0;}
+  /* ---------- PC 适配 ---------- */
+  @media (min-width:768px){
+    body{padding-bottom:32px;}
+    .tabs-m{display:none;}
+    .tabs-pc{display:flex;}
+    .kpi-grid{grid-template-columns:repeat(4,1fr);}
+    .fgrid{grid-template-columns:1fr 1fr;}
+    .quad{grid-template-columns:1fr 1fr;}
+    .item .nums{grid-template-columns:repeat(4,1fr);}
+    .todo-add{grid-template-columns:2fr 1fr 1fr auto;align-items:end;}
+    main{padding:20px 24px;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+    Allen · 外贸提成工作台
+  </h1>
+  <div class="sub">欧洲汽车零部件 & 轴承保持架 · RFQ → 定点 → 提成 全链路</div>
+  <div class="databar">
+    <button class="dbtn" onclick="exportJSON()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"/></svg>
+      导出 JSON 备份</button>
+    <button class="dbtn" onclick="document.getElementById('importFile').click()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 15V3m0 0L8 7m4-4l4 4M4 21h16"/></svg>
+      导入恢复</button>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(event)">
+    <button class="dbtn" id="clearSampleBtn" onclick="clearSamples()" style="display:none">清空示例数据</button>
+    <button class="dbtn" onclick="clearAll()">清空全部数据</button>
+  </div>
+</header>
+
+<nav class="tabs-pc" id="tabsPC"></nav>
+
+<main>
+  <div class="banner" id="backupBanner">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>
+    数据已积累超过 30 条，建议点击顶部「导出 JSON 备份」留一份底。
+  </div>
+
+  <!-- ================= 看板 ================= -->
+  <section class="tabpage on" id="page-dash">
+    <div class="card">
+      <h2><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>今天要处理</h2>
+      <div id="focusList"></div>
+    </div>
+
+    <div class="card">
+      <h2><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round"><path d="M3 20h18M6 16v-5m6 5V8m6 8v-9"/></svg>提成与业绩 KPI</h2>
+      <div class="kpi-grid" id="kpiGrid"></div>
+    </div>
+
+    <div class="card">
+      <h2><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2" stroke-linecap="round"><path d="M3 17l6-6 4 4 8-8m0 0h-5m5 0v5"/></svg>实时汇率 EUR / USD</h2>
+      <iframe class="fx-frame" src="fx.html" title="实时汇率" loading="lazy"></iframe>
+      <div class="muted" style="margin-top:6px;">汇率数据来自 TradingView，需联网加载；其余功能离线可用。</div>
+    </div>
+
+    <div class="card">
+      <h2><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round"><path d="M12 2l2.4 6.9H22l-5.5 4.2 2 7.1-6.5-4.5-6.5 4.5 2-7.1L2 8.9h7.6z"/></svg>商机攻坚（技术评审 / Round 2+）</h2>
+      <div id="attackList"></div>
+    </div>
+
+    <div class="card">
+      <h2><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4m8-4v4"/></svg>项目节点排期（OTS / PPAP / SOP）</h2>
+      <div class="chart-wrap" id="ganttWrap"></div>
+      <div class="legend">
+        <span><i class="dot" style="background:#2563eb"></i>OTS 交样</span>
+        <span><i class="dot" style="background:#d97706"></i>PPAP 提交</span>
+        <span><i class="dot" style="background:#16a34a"></i>SOP 量产</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 109 9h-9z"/><path d="M15 2.5A9 9 0 0121.5 9H15z"/></svg>赢单产品矩阵（年化金额占比）</h2>
+      <div class="chart-wrap" id="donutWrap"></div>
+      <div class="legend" id="donutLegend"></div>
+      <div id="subcatBars" style="margin-top:14px;"></div>
+    </div>
+
+    <div class="card">
+      <h2><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round"><path d="M9 11l3 3 8-8M20 12v6a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h9"/></svg>艾森豪威尔待办矩阵（完成即隐藏）</h2>
+      <div class="todo-add">
+        <input type="text" id="todoText" placeholder="输入待办事项，回车快速添加…" onkeydown="if(event.key==='Enter')addTodo()">
+        <input type="date" id="todoDue">
+        <div class="row">
+          <label style="font-size:13px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="todoImp" style="width:18px;height:18px;">重要</label>
+          <label style="font-size:13px;display:flex;align-items:center;gap:4px;"><input type="checkbox" id="todoUrg" style="width:18px;height:18px;">紧急</label>
+        </div>
+        <button class="btn btn-p" onclick="addTodo()">添加</button>
+      </div>
+      <div class="quad" id="quadWrap"></div>
+    </div>
+  </section>
+
+  <!-- ================= RFQ ================= -->
+  <section class="tabpage" id="page-rfq">
+    <div class="sec-add">
+      <h2 style="font-size:17px;">询价管理 RFQ Tracker</h2>
+      <button class="btn btn-p" onclick="openRFQForm()">+ 新建询价</button>
+    </div>
+    <div id="rfqList"></div>
+  </section>
+
+  <!-- ================= 项目提成 ================= -->
+  <section class="tabpage" id="page-proj">
+    <div class="sec-add">
+      <h2 style="font-size:17px;">项目与提成引擎 APQP & Commission</h2>
+      <button class="btn btn-p" onclick="openProjectForm()">+ 赢单转项目</button>
+    </div>
+    <div id="projList"></div>
+  </section>
+
+  <!-- ================= 客户 ================= -->
+  <section class="tabpage" id="page-client">
+    <div class="sec-add">
+      <h2 style="font-size:17px;">客户与工厂总库 CRM</h2>
+      <button class="btn btn-p" onclick="openClientForm()">+ 新建客户</button>
+    </div>
+    <div id="clientList"></div>
+  </section>
+</main>
+
+<nav class="tabs-m" id="tabsM"></nav>
+
+<div class="mask" id="mask" onclick="closeModal()"></div>
+<div class="modal" id="modal"><div class="modal-box" id="modalBox"></div></div>
+
+<script>
+/* ============================================================
+   数据层 · localStorage（key 前缀 wb_allen_）
+============================================================ */
+const LS={clients:'wb_allen_clients',rfqs:'wb_allen_rfqs',projects:'wb_allen_projects',todos:'wb_allen_todos'};
+let DB={clients:[],rfqs:[],projects:[],todos:[]};
+
+const STATUSES=['收到询价','核价中','Round 1 提交','技术评审中','Round 2+ 提交','赢单定点','丢单'];
+const SEGMENTS=['保持架','汽车零部件','EGC'];
+const SUBCATS={
+  '保持架':['DGBB','小TRB','大TRB','特大TRB','CRB','SRB','异型保持架','防尘盖','注塑','机加工','复合机加工','铸铜铸铁'],
+  '汽车零部件':['精冲件','普冲件'],
+  'EGC':['防尘盖','冲压件']
+};
+const SEG_COLOR={'保持架':'#2563eb','汽车零部件':'#d97706','EGC':'#0d9488'};
+
+function uid(){return 'id'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function num(v){const n=Number(v);return isNaN(n)?0:n;}
+function fmt(n,d){if(n==null||isNaN(n))return '0';return Number(n).toLocaleString('zh-CN',{minimumFractionDigits:d||0,maximumFractionDigits:d==null?2:d});}
+function fmtRMB(n){if(Math.abs(n)>=10000)return '¥'+fmt(n/10000,1)+'万';return '¥'+fmt(n,0);}
+function todayStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function addDays(ds,n){const d=new Date(ds+'T00:00:00');d.setDate(d.getDate()+n);return d.toISOString().slice(0,10);}
+function addYears(ds,y){const d=new Date(ds+'T00:00:00');d.setFullYear(d.getFullYear()+y);return d.toISOString().slice(0,10);}
+function save(){for(const k in LS)localStorage.setItem(LS[k],JSON.stringify(DB[k]));render();}
+/* 历史数据自动迁移：v1 的 y1-y5 → demands；v2 的 eavDirect 直填 → 平铺到生命周期各年 */
+function migrate(){
+  DB.rfqs.forEach(r=>{
+    if(!r.demands||typeof r.demands!=='object')r.demands={};
+    if(r.y1!==undefined){
+      const sop=num(r.sopYear)||new Date().getFullYear();
+      [r.y1,r.y2,r.y3,r.y4,r.y5].forEach((v,i)=>{if(v!==''&&v!=null&&!isNaN(Number(v)))r.demands[String(sop+i)]=Number(v);});
+      delete r.y1;delete r.y2;delete r.y3;delete r.y4;delete r.y5;
+    }
+    if(r.eavDirect!==undefined){
+      if(!Object.keys(r.demands).length&&num(r.eavDirect)>0){
+        const sop=num(r.sopYear)||new Date().getFullYear(),lc=num(r.lifecycle)||5;
+        for(let i=0;i<lc;i++)r.demands[String(sop+i)]=num(r.eavDirect);
+      }
+      delete r.eavDirect;
+    }
+    if(r.ltaYears===undefined)r.ltaYears=num(r.lta)>0?3:0;
+  });
+}
+function load(){
+  for(const k in LS){try{DB[k]=JSON.parse(localStorage.getItem(LS[k]))||[];}catch(e){DB[k]=[];}}
+  if(localStorage.getItem('wb_allen_init')!=='1'){seed();localStorage.setItem('wb_allen_init','1');}
+  else migrate();
+  save();
+}
+
+/* ============================================================
+   示例数据（含 1 条逾期）
+============================================================ */
+function seed(){
+  const c1={id:uid(),code:'ZF',name:'采埃孚集团 ZF Friedrichshafen AG',country:'德国',type:'老客户',sample:true,plants:[
+    {name:'ZF 腓特烈港工厂',contact:'Hans Müller',title:'Senior Buyer',email:'hans.mueller@zf.com'},
+    {name:'ZF 斯洛伐克工厂',contact:'Peter Kovac',title:'Purchasing Manager',email:'peter.kovac@zf.com'}]};
+  const c2={id:uid(),code:'Schaeffler',name:'舍弗勒集团 Schaeffler AG',country:'德国',type:'老客户',sample:true,plants:[
+    {name:'Schaeffler 黑措根奥拉赫工厂',contact:'Anna Weber',title:'Commodity Buyer',email:'anna.weber@schaeffler.com'}]};
+  const c3={id:uid(),code:'GKN',name:'GKN Automotive',country:'英国',type:'新客户',sample:true,plants:[]};
+  DB.clients=[c1,c2,c3];
+  const r3={id:uid(),code:'RFQ-26-003',clientId:c1.id,project:'ZF 8HP 变速箱保持架',segment:'保持架',subcat:'小TRB',
+    sopYear:2026,lifecycle:5,demands:{'2026':300000,'2027':500000,'2028':600000,'2029':600000,'2030':500000},
+    currency:'EUR',fxRate:7.85,cost:6.1,barePrice:8.6,moldFee:400000,moldQty:2500000,lta:2,ltaYears:3,rebate:1.5,
+    status:'赢单定点',sample:true,revs:[{ver:'Rev1',date:'2026-02-10',price:9.2,note:'首轮报价'},{ver:'Rev2',date:'2026-03-05',price:8.6,note:'VA/VE 后定点价'}]};
+  DB.rfqs=[
+    {id:uid(),code:'RFQ-26-001',clientId:c1.id,project:'ZF 电驱桥大TRB保持架',segment:'保持架',subcat:'大TRB',
+      sopYear:2027,lifecycle:6,demands:{'2027':200000,'2028':350000,'2029':400000,'2030':400000,'2031':400000,'2032':350000},
+      currency:'EUR',fxRate:7.85,cost:8.2,barePrice:11.5,moldFee:600000,moldQty:1000000,lta:3,ltaYears:3,rebate:2,
+      status:'技术评审中',sample:true,revs:[{ver:'R1',date:'2026-06-18',price:11.5,note:'Round 1 提交'}]},
+    {id:uid(),code:'RFQ-26-002',clientId:c2.id,project:'Schaeffler 精冲法兰盘',segment:'汽车零部件',subcat:'精冲件',
+      sopYear:2027,lifecycle:5,demands:{'2027':150000,'2028':280000,'2029':300000,'2030':300000,'2031':250000},
+      currency:'EUR',fxRate:7.82,cost:4.4,barePrice:5.9,moldFee:220000,moldQty:800000,lta:2,ltaYears:3,rebate:0,
+      status:'Round 2+ 提交',sample:true,revs:[]},
+    r3,
+    {id:uid(),code:'RFQ-26-004',clientId:c3.id,project:'GKN 防尘盖（EGC）',segment:'EGC',subcat:'防尘盖',
+      sopYear:2027,lifecycle:4,demands:{'2027':80000,'2028':120000,'2029':120000,'2030':100000},
+      currency:'USD',fxRate:7.15,cost:1.1,barePrice:1.55,moldFee:60000,moldQty:400000,lta:0,ltaYears:0,rebate:0,
+      status:'收到询价',sample:true,created:addDays(todayStr(),-4),revs:[]}
+  ];
+  DB.projects=[{id:uid(),rfqId:r3.id,custPN:'ZF-1358-301-024',internalPN:'EG-C-26031',sapCode:'SAP-80001122',
+    otsDate:'2026-01-15',ppapDate:'2026-04-30',sopDate:'2026-08-20',oneTimeBonus:3000,status:'进行中',
+    doneMile:['2026-01-15'],sample:true}];
+  DB.todos=[
+    {id:uid(),text:'ZF RFQ-26-001 技术答疑资料回复 Hans',important:true,urgent:true,due:addDays(todayStr(),-1),done:false,sample:true},
+    {id:uid(),text:'Schaeffler RFQ-26-002 Round 2 降价方案测算',important:true,urgent:false,due:addDays(todayStr(),2),done:false,sample:true},
+    {id:uid(),text:'GKN RFQ-26-004 核价并准备 Round 1 报价',important:false,urgent:true,due:todayStr(),done:false,sample:true},
+    {id:uid(),text:'整理上半年报价汇率台账归档',important:false,urgent:false,due:addDays(todayStr(),10),done:false,sample:true}
+  ];
+}
+
+/* ============================================================
+   提成算力（与 Notion 蓝图八大公式一一对应）
+============================================================ */
+/* EAV = 阶梯需求量的算术平均（忽略留空年份） */
+function eavOf(r){
+  const vals=Object.values(r.demands||{}).map(Number).filter(v=>!isNaN(v));
+  return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0;
+}
+/* 年均销售额（RMB）= EAV × 最终对外单价 × 报价汇率 */
+function annualSalesOf(r){return eavOf(r)*finalPriceOf(r)*num(r.fxRate);}
+/* LTA 年降价格阶梯：SOP 年 = 最终对外单价；SOP+n = 上一年 × (1 - LTA%)，生成 n = 1..年降年数 */
+function priceLadder(r){
+  const years=num(r.ltaYears)||0,p0=finalPriceOf(r),sop=num(r.sopYear)||new Date().getFullYear();
+  const f=1-num(r.lta)/100,out=[{year:sop,price:p0}];
+  for(let i=1;i<=years;i++)out.push({year:sop+i,price:out[i-1].price*f});
+  return out;
+}
+function amortOf(r){return num(r.moldQty)>0?num(r.moldFee)/num(r.moldQty):0;}
+function finalPriceOf(r){return num(r.barePrice)+amortOf(r);}
+function marginOf(r){const fp=finalPriceOf(r);return fp>0?(fp-num(r.cost)*0.87)/fp:0;}
+function clientOf(r){return DB.clients.find(c=>c.id===r.clientId)||null;}
+function commCalc(r){
+  if(!r)return null;
+  const client=clientOf(r);
+  const seg=r.segment,ctype=client?client.type:'新客户';
+  const margin=marginOf(r);
+  const base=seg==='保持架'?0.01:0.006;
+  const mCoef=margin<0.3?0.5:1;
+  const cCoef=ctype==='老客户'?0.5:1;
+  const rate=base*mCoef*cCoef;
+  const years=seg==='保持架'?1:3;
+  const eav=eavOf(r),fp=finalPriceOf(r);
+  const total=fp*num(r.fxRate)*eav*rate*years;
+  return {margin,base,mCoef,cCoef,rate,years,eav,fp,total,ctype,client};
+}
+function rfqOfProject(p){return DB.rfqs.find(r=>r.id===p.rfqId)||null;}
+
+/* ============================================================
+   渲染框架
+============================================================ */
+const TABS=[
+  {id:'dash',name:'看板',icon:'<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>'},
+  {id:'rfq',name:'询价',icon:'<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 13h6m-6 4h6"/>'},
+  {id:'proj',name:'提成',icon:'<circle cx="12" cy="12" r="9"/><path d="M12 7v10m3-8.5c-.7-1-1.8-1.5-3-1.5-1.8 0-3 1-3 2.5s1.2 2 3 2.5 3 1 3 2.5-1.2 2.5-3 2.5c-1.2 0-2.3-.5-3-1.5"/>'},
+  {id:'client',name:'客户',icon:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5M16 4.5a3.5 3.5 0 010 7m5.5 8.5c-.4-2.4-1.7-4.1-3.5-5"/>'}
+];
+let curTab='dash';
+function buildTabs(){
+  document.getElementById('tabsPC').innerHTML=TABS.map(t=>
+    '<button data-t="'+t.id+'" class="'+(t.id===curTab?'on':'')+'" onclick="switchTab(\''+t.id+'\')">'+t.name+'</button>').join('');
+  document.getElementById('tabsM').innerHTML=TABS.map(t=>
+    '<button data-t="'+t.id+'" class="'+(t.id===curTab?'on':'')+'" onclick="switchTab(\''+t.id+'\')">'+
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+t.icon+'</svg>'+t.name+'</button>').join('');
+}
+function switchTab(id){
+  curTab=id;
+  document.querySelectorAll('.tabpage').forEach(p=>p.classList.toggle('on',p.id==='page-'+id));
+  document.querySelectorAll('[data-t]').forEach(b=>b.classList.toggle('on',b.dataset.t===id));
+  window.scrollTo(0,0);
+}
+function render(){
+  renderFocus();renderKPI();renderAttack();renderGantt();renderDonut();renderQuad();
+  renderRFQList();renderProjList();renderClientList();renderBanner();buildTabs();
+  document.getElementById('clearSampleBtn').style.display=
+    [...DB.clients,...DB.rfqs,...DB.projects,...DB.todos].some(x=>x.sample)?'inline-flex':'none';
+}
+function renderBanner(){
+  const n=DB.clients.length+DB.rfqs.length+DB.projects.length+DB.todos.length;
+  document.getElementById('backupBanner').classList.toggle('on',n>=30);
+}
+
+/* ---------- 今天要处理 ---------- */
+function renderFocus(){
+  const t=todayStr();const items=[];
+  DB.todos.filter(x=>!x.done&&x.due&&x.due<t).forEach(x=>items.push({
+    html:'<span class="tag red">逾期</span><b>'+esc(x.text)+'</b> <span class="muted">应完成于 '+esc(x.due)+'</span>',
+    btn:'<button class="btn btn-p btn-sm" onclick="doneTodo(\''+x.id+'\')">完成</button>',od:true}));
+  DB.todos.filter(x=>!x.done&&x.due===t).forEach(x=>items.push({
+    html:'<span class="tag orange">今天到期</span>'+esc(x.text),
+    btn:'<button class="btn btn-p btn-sm" onclick="doneTodo(\''+x.id+'\')">完成</button>',od:false}));
+  DB.rfqs.filter(r=>r.status==='收到询价'&&(r.created||'')<=addDays(t,-3)).forEach(r=>items.push({
+    html:'<span class="tag blue">待核价</span>'+esc(r.code)+' · '+esc(r.project)+' <span class="muted">收到已超 3 天</span>',
+    btn:'<button class="btn btn-p btn-sm" onclick="advanceRFQ(\''+r.id+'\')">开始核价</button>',od:false}));
+  DB.projects.filter(p=>p.status==='进行中').forEach(p=>{
+    const r=rfqOfProject(p);const name=r?(r.code+' '+r.project):'项目';
+    [['otsDate','OTS 交样','blue'],['ppapDate','PPAP 提交','orange']].forEach(m=>{
+      const d=p[m[0]];
+      if(d&&d>=t&&d<=addDays(t,30)&&!(p.doneMile||[]).includes(d)){
+        items.push({html:'<span class="tag '+m[2]+'">'+m[1]+'</span>'+esc(name)+' <span class="muted">节点 '+d+'（30 天内）</span>',
+          btn:'<button class="btn btn-g btn-sm" onclick="ackMile(\''+p.id+'\',\''+d+'\')">节点已交付</button>',od:false});}
+    });
+  });
+  document.getElementById('focusList').innerHTML=items.length
+    ? items.map(i=>'<div class="focus-item'+(i.od?' overdue':'')+'"><div class="txt">'+i.html+'</div>'+i.btn+'</div>').join('')
+    : '<div class="empty">今天没有必须处理的事项，去推进一下报价吧。</div>';
+}
+
+/* ---------- KPI ---------- */
+function renderKPI(){
+  const act=DB.projects.filter(p=>p.status==='进行中');
+  const eavPan=DB.rfqs.filter(r=>r.status!=='丢单').reduce((s,r)=>s+eavOf(r),0);
+  const spotPool=act.reduce((s,p)=>s+num(p.oneTimeBonus),0);
+  const massPool=act.reduce((s,p)=>{const c=commCalc(rfqOfProject(p));return s+(c?c.total:0);},0);
+  document.getElementById('kpiGrid').innerHTML=
+    '<div class="kpi k1"><div class="lab">进行中项目数</div><div class="num">'+act.length+'</div></div>'+
+    '<div class="kpi k2"><div class="lab">EAV 总盘面（件/年）</div><div class="num">'+fmt(eavPan,0)+'</div></div>'+
+    '<div class="kpi k3"><div class="lab">预估定点提成池</div><div class="num">'+fmtRMB(spotPool)+'</div></div>'+
+    '<div class="kpi k4"><div class="lab">生命周期量产提成总池</div><div class="num">'+fmtRMB(massPool)+'</div></div>';
+}
+
+/* ---------- 商机攻坚 ---------- */
+function renderAttack(){
+  const list=DB.rfqs.filter(r=>r.status==='技术评审中'||r.status==='Round 2+ 提交');
+  document.getElementById('attackList').innerHTML=list.length?list.map(r=>{
+    const c=clientOf(r);const cc=commCalc(r);
+    return '<div class="item"><div class="head"><b>'+esc(r.code)+'</b><span class="tag orange">'+esc(r.status)+'</span>'+
+      '<span class="tag" style="background:'+SEG_COLOR[r.segment]+'22;color:'+SEG_COLOR[r.segment]+'">'+esc(r.segment)+' · '+esc(r.subcat)+'</span></div>'+
+      '<div class="meta"><span>'+esc(c?c.code:'-')+' / '+esc(r.project)+'</span><span>EAV '+fmt(cc.eav,0)+' 件</span>'+
+      '<span>最终单价 '+fmt(cc.fp)+' '+esc(r.currency)+'</span><span>毛利率 '+(cc.margin*100).toFixed(1)+'%</span></div>'+
+      '<div class="ops"><button class="btn btn-g btn-sm" onclick="openRFQForm(\''+r.id+'\')">跟进 / Rev 报价</button>'+
+      '<button class="btn btn-p btn-sm" onclick="advanceRFQ(\''+r.id+'\')">推进状态 →</button></div></div>';
+  }).join(''):'<div class="empty">当前没有处于攻坚阶段的 RFQ。</div>';
+}
+
+/* ---------- Gantt ---------- */
+function renderGantt(){
+  const projs=DB.projects.filter(p=>p.status==='进行中');
+  if(!projs.length){document.getElementById('ganttWrap').innerHTML='<div class="empty">暂无进行中项目节点。</div>';return;}
+  const t=new Date(todayStr()+'T00:00:00');
+  const start=new Date(t);start.setMonth(start.getMonth()-1);start.setDate(1);
+  const end=new Date(t);end.setMonth(end.getMonth()+8);
+  const L=120,W=680,H=projs.length*36+34,span=end-start;
+  const X=ds=>L+(new Date(ds+'T00:00:00')-start)/span*(W-L-12);
+  let s='<svg viewBox="0 0 '+W+' '+H+'" style="min-width:640px;width:100%;font-family:inherit">';
+  for(let m=new Date(start);m<=end;m.setMonth(m.getMonth()+1)){
+    const x=L+(m-start)/span*(W-L-12);
+    s+='<line x1="'+x+'" y1="20" x2="'+x+'" y2="'+(H-6)+'" stroke="#eef0f4"/>'+
+       '<text x="'+(x+3)+'" y="14" font-size="10" fill="#9ca3af">'+(m.getMonth()+1)+'月</text>';
+  }
+  const tx=X(todayStr());
+  s+='<line x1="'+tx+'" y1="20" x2="'+tx+'" y2="'+(H-6)+'" stroke="#dc2626" stroke-dasharray="3 3"/>';
+  projs.forEach((p,i)=>{
+    const y=44+i*36;const r=rfqOfProject(p);
+    s+='<text x="4" y="'+(y+4)+'" font-size="11.5" fill="#374151">'+esc((r?r.code:'项目').slice(0,12))+'</text>';
+    s+='<line x1="'+L+'" y1="'+y+'" x2="'+(W-12)+'" y2="'+y+'" stroke="#f1f5f9"/>';
+    const done=(p.doneMile||[]);
+    const mk=(d,color,shape)=>{
+      if(!d)return '';const x=X(d);if(x<L||x>W-12)return '';
+      const op=done.includes(d)?' opacity="0.3"':'';
+      if(shape==='d')return '<rect x="'+(x-5)+'" y="'+(y-5)+'" width="10" height="10" rx="2" fill="'+color+'" transform="rotate(45 '+x+' '+y+')"'+op+'/>';
+      if(shape==='t')return '<path d="M'+x+' '+(y-6)+' l6 11 h-12 z" fill="'+color+'"'+op+'/>';
+      return '<circle cx="'+x+'" cy="'+y+'" r="6" fill="'+color+'"'+op+'/>';
+    };
+    s+=mk(p.otsDate,'#2563eb','d')+mk(p.ppapDate,'#d97706','t')+mk(p.sopDate,'#16a34a','c');
+  });
+  document.getElementById('ganttWrap').innerHTML=s+'</svg>';
+}
+
+/* ---------- 产品矩阵 Donut + 细分条形 ---------- */
+function renderDonut(){
+  const won=DB.rfqs.filter(r=>r.status==='赢单定点');
+  const agg={};let total=0;
+  won.forEach(r=>{const v=eavOf(r)*finalPriceOf(r)*num(r.fxRate);agg[r.segment]=(agg[r.segment]||0)+v;total+=v;});
+  if(!total){document.getElementById('donutWrap').innerHTML='<div class="empty">暂无赢单数据。</div>';
+    document.getElementById('donutLegend').innerHTML='';document.getElementById('subcatBars').innerHTML='';return;}
+  const cx=110,cy=110,R=86,r=52;let a0=-Math.PI/2;let s='<svg viewBox="0 0 340 220" style="max-width:420px;width:100%">';
+  const legs=[];
+  Object.keys(agg).forEach(k=>{
+    const frac=agg[k]/total,a1=a0+frac*Math.PI*2,large=frac>0.5?1:0;
+    const x0=cx+R*Math.cos(a0),y0=cy+R*Math.sin(a0),x1=cx+R*Math.cos(a1),y1=cy+R*Math.sin(a1);
+    const xi1=cx+r*Math.cos(a1),yi1=cy+r*Math.sin(a1),xi0=cx+r*Math.cos(a0),yi0=cy+r*Math.sin(a0);
+    s+='<path d="M'+x0+' '+y0+' A'+R+' '+R+' 0 '+large+' 1 '+x1+' '+y1+' L'+xi1+' '+yi1+' A'+r+' '+r+' 0 '+large+' 0 '+xi0+' '+yi0+' Z" fill="'+SEG_COLOR[k]+'"/>';
+    const mid=(a0+a1)/2,lx=cx+(R+14)*Math.cos(mid),ly=cy+(R+14)*Math.sin(mid);
+    s+='<text x="'+lx+'" y="'+ly+'" font-size="11" fill="#374151" text-anchor="'+(Math.cos(mid)>0.2?'start':Math.cos(mid)<-0.2?'end':'middle')+'">'+(frac*100).toFixed(0)+'%</text>';
+    legs.push('<span><i class="dot" style="background:'+SEG_COLOR[k]+'"></i>'+k+' · '+fmtRMB(agg[k])+'</span>');
+    a0=a1;
+  });
+  s+='<text x="'+cx+'" y="'+(cy-2)+'" font-size="11" fill="#6b7280" text-anchor="middle">赢单年化</text>'+
+     '<text x="'+cx+'" y="'+(cy+16)+'" font-size="14" font-weight="700" fill="#1f2937" text-anchor="middle">'+fmtRMB(total)+'</text></svg>';
+  document.getElementById('donutWrap').innerHTML=s;
+  document.getElementById('donutLegend').innerHTML=legs.join('');
+  const sub={};won.forEach(r=>{const v=eavOf(r)*finalPriceOf(r)*num(r.fxRate);const k=r.segment+'-'+r.subcat;sub[k]=(sub[k]||0)+v;});
+  const max=Math.max.apply(null,Object.values(sub));
+  document.getElementById('subcatBars').innerHTML='<div class="muted" style="margin-bottom:8px;">按产品细分（年化 ¥）</div>'+
+    Object.keys(sub).sort((a,b)=>sub[b]-sub[a]).map(k=>{
+      const seg=k.split('-')[0];
+      return '<div style="margin-bottom:8px;"><div style="font-size:12.5px;margin-bottom:3px;">'+esc(k)+' <b style="float:right">'+fmtRMB(sub[k])+'</b></div>'+
+        '<div style="background:#f1f5f9;border-radius:6px;height:12px;"><div style="width:'+(sub[k]/max*100).toFixed(1)+'%;height:100%;border-radius:6px;background:'+SEG_COLOR[seg]+'"></div></div></div>';
+    }).join('');
+}
+
+/* ---------- 艾森豪威尔 ---------- */
+function renderQuad(){
+  const qs=[
+    {k:'q1',t:'重要 & 紧急 · 立即做',f:x=>x.important&&x.urgent},
+    {k:'q2',t:'重要不紧急 · 计划做',f:x=>x.important&&!x.urgent},
+    {k:'q3',t:'紧急不重要 · 授权做',f:x=>!x.important&&x.urgent},
+    {k:'q4',t:'不重要不紧急 · 以后做',f:x=>!x.important&&!x.urgent}];
+  const t=todayStr();
+  document.getElementById('quadWrap').innerHTML=qs.map(q=>{
+    const list=DB.todos.filter(x=>!x.done&&q.f(x));
+    return '<div class="q '+q.k+'"><h4>'+q.t+'（'+list.length+'）</h4>'+
+      (list.length?list.map(x=>'<div class="todo"><button class="chk" onclick="doneTodo(\''+x.id+'\')" title="完成">'+
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="3" stroke-linecap="round"><path d="M4 12l5 5 11-11"/></svg></button>'+
+        '<div class="t">'+esc(x.text)+(x.due?'<div class="due'+(x.due<t?' od':'')+'">'+esc(x.due)+(x.due<t?' 已逾期':'')+'</div>':'')+'</div>'+
+        '<button class="btn btn-g btn-sm" onclick="delTodo(\''+x.id+'\')">删</button></div>').join('')
+      :'<div class="empty" style="padding:8px 0;">空</div>')+'</div>';
+  }).join('');
+}
+function addTodo(){
+  const txt=document.getElementById('todoText').value.trim();if(!txt)return;
+  DB.todos.push({id:uid(),text:txt,important:document.getElementById('todoImp').checked,
+    urgent:document.getElementById('todoUrg').checked,due:document.getElementById('todoDue').value||'',done:false});
+  document.getElementById('todoText').value='';document.getElementById('todoImp').checked=false;document.getElementById('todoUrg').checked=false;
+  save();
+}
+function doneTodo(id){const x=DB.todos.find(t=>t.id===id);if(x)x.done=true;save();}
+function delTodo(id){DB.todos=DB.todos.filter(t=>t.id!==id);save();}
+
+/* ============================================================
+   RFQ 列表与表单
+============================================================ */
+function statusTag(st){
+  const map={'收到询价':'blue','核价中':'purple','Round 1 提交':'purple','技术评审中':'orange','Round 2+ 提交':'orange','赢单定点':'green','丢单':'red'};
+  return '<span class="tag '+(map[st]||'blue')+'">'+esc(st)+'</span>';
+}
+function renderRFQList(){
+  document.getElementById('rfqList').innerHTML=DB.rfqs.length?DB.rfqs.map(r=>{
+    const c=clientOf(r);const cc=commCalc(r);const linked=DB.projects.some(p=>p.rfqId===r.id);
+    return '<div class="item"><div class="head"><b>'+esc(r.code)+'</b>'+statusTag(r.status)+
+      '<span class="tag" style="background:'+SEG_COLOR[r.segment]+'22;color:'+SEG_COLOR[r.segment]+'">'+esc(r.segment)+'-'+esc(r.subcat)+'</span></div>'+
+      '<div class="meta"><span>'+esc(c?c.code+' · '+c.name:'未关联客户')+'</span><span>'+esc(r.project)+'</span>'+
+      '<span>SOP '+esc(r.sopYear||'-')+' / 周期 '+esc(r.lifecycle||'-')+'年 · 阶梯需求</span>'+
+      (r.revs&&r.revs.length?'<span>'+r.revs.length+' 次 Rev 报价</span>':'')+'</div>'+
+      '<div class="nums">'+
+      '<div><span>EAV 年均需求</span><b>'+fmt(cc.eav,0)+' 件</b></div>'+
+      '<div><span>最终对外单价</span><b>'+fmt(cc.fp)+' '+esc(r.currency)+'</b></div>'+
+      '<div><span>年均销售额</span><b style="color:var(--blue-d)">'+fmtRMB(annualSalesOf(r))+'</b></div>'+
+      '<div><span>核算毛利率</span><b style="color:'+(cc.margin<0.3?'var(--red)':'var(--green)')+'">'+(cc.margin*100).toFixed(1)+'%</b></div>'+
+      '<div><span>若赢单·提成比例</span><b>'+(cc.rate*100).toFixed(2)+'%</b></div></div>'+
+      (num(r.ltaYears)>0?'<div class="meta" style="margin-top:6px;"><span style="color:var(--orange)">年降 '+esc(r.lta)+'% × '+esc(r.ltaYears)+'年：</span><span>'+priceLadder(r).map(p=>p.year+' '+fmt(p.price)).join(' → ')+' '+esc(r.currency)+'</span></div>':'')+
+      '<div class="ops"><button class="btn btn-g btn-sm" onclick="openRFQForm(\''+r.id+'\')">编辑 / Rev 历史</button>'+
+      '<button class="btn btn-g btn-sm" onclick="advanceRFQ(\''+r.id+'\')">推进状态 →</button>'+
+      (r.status==='赢单定点'&&!linked?'<button class="btn btn-p btn-sm" onclick="openProjectForm(null,\''+r.id+'\')">转入提成库</button>':'')+
+      '<button class="btn btn-r btn-sm" onclick="delRFQ(\''+r.id+'\')">删除</button></div></div>';
+  }).join(''):'<div class="card"><div class="empty">还没有询价记录，点击右上角「+ 新建询价」。</div></div>';
+}
+function advanceRFQ(id){
+  const r=DB.rfqs.find(x=>x.id===id);if(!r)return;
+  const i=STATUSES.indexOf(r.status);
+  if(i>=0&&i<STATUSES.length-2){r.status=STATUSES[i+1];}
+  else if(r.status==='丢单')return;
+  save();
+}
+function delRFQ(id){
+  if(!confirm('确认删除该 RFQ？关联项目将失去联动数据。'))return;
+  DB.rfqs=DB.rfqs.filter(r=>r.id!==id);save();
+}
+function openRFQForm(id){
+  const r=id?DB.rfqs.find(x=>x.id===id):null;
+  const v=(k,d)=>r?(r[k]!=null?r[k]:''):(d||'');
+  const nextCode='RFQ-26-'+String(DB.rfqs.length+1).padStart(3,'0');
+  const clientOpts=DB.clients.map(c=>'<option value="'+c.id+'"'+(r&&r.clientId===c.id?' selected':'')+'>'+esc(c.code+' · '+c.name)+'</option>').join('');
+  const revs=(r&&r.revs)||[];
+  openModal('<h3>'+(r?'编辑询价':'新建询价')+'<button class="x" onclick="closeModal()">✕</button></h3>'+
+  '<div class="fgrid">'+
+  '<div><label class="f">RFQ ID（自定义主键）</label><input type="text" id="f_code" value="'+esc(v('code',nextCode))+'"></div>'+
+  '<div><label class="f">关联客户（自动带出类型/联系人）</label><select id="f_client">'+clientOpts+'</select></div>'+
+  '<div><label class="f">项目名称</label><input type="text" id="f_project" value="'+esc(v('project'))+'"></div>'+
+  '<div><label class="f">状态流水线</label><select id="f_status">'+STATUSES.map(s=>'<option'+(v('status','收到询价')===s?' selected':'')+'>'+s+'</option>').join('')+'</select></div>'+
+  '<div><label class="f">业务板块（大类）</label><select id="f_segment" onchange="syncSubcat();syncPricingArea()">'+SEGMENTS.map(s=>'<option'+(v('segment','保持架')===s?' selected':'')+'>'+s+'</option>').join('')+'</select></div>'+
+  '<div><label class="f">产品细分（子类）</label><select id="f_subcat" onchange="syncPricingArea()"></select></div>'+
+  '<div><label class="f">SOP 年份</label><input type="number" id="f_sopYear" value="'+esc(v('sopYear',2027))+'" onchange="syncPricingArea()"></div>'+
+  '<div><label class="f">币种</label><select id="f_currency">'+['EUR','USD','CNY'].map(c=>'<option'+(v('currency','EUR')===c?' selected':'')+'>'+c+'</option>').join('')+'</select></div>'+
+  '<div><label class="f">报价汇率（固定报价当天）</label><input type="number" step="0.0001" id="f_fxRate" value="'+esc(v('fxRate',7.85))+'" oninput="previewCalc()"></div>'+
+  '<div><label class="f">单件成本</label><input type="number" step="0.01" id="f_cost" value="'+esc(v('cost'))+'" oninput="previewCalc()"></div>'+
+  '<div><label class="f">单件裸价</label><input type="number" step="0.01" id="f_barePrice" value="'+esc(v('barePrice'))+'" oninput="previewCalc()"></div>'+
+  '<div><label class="f">模具总费</label><input type="number" id="f_moldFee" value="'+esc(v('moldFee'))+'" oninput="previewCalc()"></div>'+
+  '<div><label class="f">模具分摊数量</label><input type="number" id="f_moldQty" value="'+esc(v('moldQty'))+'" oninput="previewCalc()"></div>'+
+  '<div><label class="f">LTA 年降比例 %</label><input type="number" step="0.1" id="f_lta" value="'+esc(v('lta'))+'" oninput="previewCalc()"></div>'+
+  '<div><label class="f">年降年数（价格生成至 SOP+N）</label><input type="number" min="0" max="20" id="f_ltaYears" value="'+esc(v('ltaYears',3))+'" oninput="previewCalc()"></div>'+
+  '<div><label class="f">Rebate 返利比例 %</label><input type="number" step="0.1" id="f_rebate" value="'+esc(v('rebate'))+'"></div>'+
+  '</div>'+
+  '<div id="pricingArea"></div>'+
+  '<div class="calcbar" id="calcBar"></div>'+
+  '<label class="f">Rev 报价历史（同一 RFQ 历次版本）</label>'+
+  '<div id="revRows">'+revs.map((rv,i)=>revRowHTML(rv)).join('')+'</div>'+
+  '<button class="btn btn-g btn-sm" onclick="addRevRow()">+ 添加 Rev 记录</button>'+
+  '<div style="display:flex;gap:10px;margin-top:16px;"><button class="btn btn-p" style="flex:1" onclick="saveRFQ(\''+(r?r.id:'')+'\')">保存</button>'+
+  '<button class="btn btn-g" onclick="closeModal()">取消</button></div>');
+  syncSubcat(r?r.subcat:null);
+  syncPricingArea(r?{lifecycle:r.lifecycle,demands:r.demands||{}}:null);
+}
+/* 读取当前阶梯区已填的值（用于重新生成时保留输入） */
+function currentPricingVals(){
+  const o={demands:{}};
+  const le=document.getElementById('f_lifecycle');if(le)o.lifecycle=le.value;
+  document.querySelectorAll('.f_dy').forEach(i=>{o.demands[i.dataset.y]=i.value;});
+  return o;
+}
+/* 所有产品统一：按 SOP 年份 + 生命周期自动生成逐年阶梯需求 */
+function syncPricingArea(init){
+  const prev=init||currentPricingVals();
+  const area=document.getElementById('pricingArea');
+  const sop=num(document.getElementById('f_sopYear').value)||new Date().getFullYear();
+  let lc=num(prev.lifecycle)||5;if(lc>20)lc=20;if(lc<1)lc=1;
+  let rows='';
+  for(let i=0;i<lc;i++){const y=sop+i;
+    rows+='<div><label class="f">'+y+' 年需求量</label><input type="number" class="f_dy" data-y="'+y+'" value="'+esc(prev.demands&&prev.demands[y]!=null?prev.demands[y]:'')+'" oninput="previewCalc()"></div>';}
+  area.innerHTML='<div class="fgrid"><div><label class="f">生命周期（年）· 自动生成 '+sop+' ~ '+(sop+lc-1)+' 阶梯</label>'+
+    '<input type="number" id="f_lifecycle" min="1" max="20" value="'+lc+'" onchange="syncPricingArea()"></div></div>'+
+    '<div class="fgrid">'+rows+'</div>'+
+    '<div class="muted" style="margin-top:6px;">按 SOP '+sop+' 年起 '+lc+' 年生命周期自动生成；留空年份不计入 EAV 平均（上限 20 年）。</div>';
+  previewCalc();
+}
+function revRowHTML(rv){
+  rv=rv||{};
+  return '<div class="revrow"><input type="text" class="rv_ver" placeholder="版本" value="'+esc(rv.ver||'')+'">'+
+    '<input type="date" class="rv_date" value="'+esc(rv.date||'')+'">'+
+    '<input type="number" step="0.01" class="rv_price" placeholder="单价" value="'+esc(rv.price!=null?rv.price:'')+'">'+
+    '<input type="text" class="rv_note" placeholder="备注" value="'+esc(rv.note||'')+'">'+
+    '<button class="btn btn-r btn-sm" onclick="this.parentNode.remove();previewCalc()">✕</button></div>';
+}
+function addRevRow(){document.getElementById('revRows').insertAdjacentHTML('beforeend',revRowHTML());}
+function syncSubcat(selected){
+  const seg=document.getElementById('f_segment').value;
+  const sel=document.getElementById('f_subcat');
+  sel.innerHTML=SUBCATS[seg].map(s=>'<option'+(selected===s?' selected':'')+'>'+s+'</option>').join('');
+}
+function readRFQForm(){
+  const g=id=>document.getElementById(id);
+  const ds={};document.querySelectorAll('.f_dy').forEach(i=>{if(i.value!=='')ds[i.dataset.y]=num(i.value);});
+  const le=g('f_lifecycle');
+  return {code:g('f_code').value.trim()||'RFQ-?',clientId:g('f_client').value,project:g('f_project').value.trim(),
+    status:g('f_status').value,segment:g('f_segment').value,subcat:g('f_subcat').value,
+    sopYear:num(g('f_sopYear').value),lifecycle:le?num(le.value):'',demands:ds,
+    currency:g('f_currency').value,fxRate:num(g('f_fxRate').value),cost:num(g('f_cost').value),
+    barePrice:num(g('f_barePrice').value),moldFee:num(g('f_moldFee').value),moldQty:num(g('f_moldQty').value),
+    lta:num(g('f_lta').value),ltaYears:num(g('f_ltaYears')?g('f_ltaYears').value:0),rebate:num(g('f_rebate').value),
+    revs:Array.prototype.map.call(document.querySelectorAll('#revRows .revrow'),row=>({
+      ver:row.querySelector('.rv_ver').value.trim(),date:row.querySelector('.rv_date').value,
+      price:num(row.querySelector('.rv_price').value),note:row.querySelector('.rv_note').value.trim()
+    })).filter(rv=>rv.ver||rv.date||rv.price)};
+}
+function previewCalc(){
+  try{
+    const r=readRFQForm();const cc=commCalc(r);
+    const lad=num(r.ltaYears)>0
+      ?'<br>年降价格阶梯：'+priceLadder(r).map((p,i)=>(i===0?'<b>':'')+p.year+'年 '+fmt(p.price)+(i===0?'</b>':'')).join(' → ')+' '+esc(r.currency)
+      :'';
+    document.getElementById('calcBar').innerHTML=
+      'EAV 年均需求：<b>'+fmt(cc.eav,0)+'</b> 件　|　单件分摊额：<b>'+fmt(amortOf(r))+'</b>　|　最终对外单价：<b>'+fmt(cc.fp)+' '+esc(r.currency)+'</b><br>'+
+      '年均销售额：<b>'+fmtRMB(annualSalesOf(r))+'</b>（EAV × 最终单价 × 汇率 '+r.fxRate+'）　|　核算毛利率：<b>'+(cc.margin*100).toFixed(1)+'%</b><br>'+
+      '基准点数 '+(cc.base*100).toFixed(1)+'% × 毛利系数 '+cc.mCoef+' × 客户系数 '+cc.cCoef+' = 提成比例 <b>'+(cc.rate*100).toFixed(2)+'%</b>'+lad;
+  }catch(e){}
+}
+function saveRFQ(id){
+  const data=readRFQForm();
+  if(!data.project){alert('请填写项目名称');return;}
+  if(id){const r=DB.rfqs.find(x=>x.id===id);Object.assign(r,data);}
+  else{data.id=uid();data.created=todayStr();DB.rfqs.push(data);}
+  closeModal();save();
+}
+
+/* ============================================================
+   项目与提成
+============================================================ */
+function renderProjList(){
+  document.getElementById('projList').innerHTML=DB.projects.length?DB.projects.map(p=>{
+    const r=rfqOfProject(p);const cc=commCalc(r);
+    if(!r||!cc)return '';
+    const grand=cc.total+num(p.oneTimeBonus);
+    return '<div class="item"><div class="head"><b>'+esc(r.code)+' · '+esc(r.project)+'</b>'+
+      '<span class="tag '+(p.status==='进行中'?'green':'blue')+'">'+esc(p.status)+'</span>'+
+      '<span class="tag" style="background:'+SEG_COLOR[r.segment]+'22;color:'+SEG_COLOR[r.segment]+'">'+esc(r.segment)+'-'+esc(r.subcat)+'</span></div>'+
+      '<div class="meta"><span>客户P/N '+esc(p.custPN||'-')+'</span><span>内部工程号 '+esc(p.internalPN||'-')+'</span><span>SAP '+esc(p.sapCode||'-')+'</span></div>'+
+      '<div class="meta" style="margin-top:4px;"><span>OTS '+esc(p.otsDate||'-')+'</span><span>PPAP '+esc(p.ppapDate||'-')+'</span><span>SOP '+esc(p.sopDate||'-')+'（提成起算）</span></div>'+
+      '<div class="nums">'+
+      '<div><span>核算毛利率</span><b style="color:'+(cc.margin<0.3?'var(--red)':'var(--green)')+'">'+(cc.margin*100).toFixed(1)+'%</b></div>'+
+      '<div><span>最终提成比例</span><b>'+(cc.rate*100).toFixed(2)+'%<span style="font-size:11px;color:var(--sub)">（'+(cc.base*100).toFixed(1)+'%×'+cc.mCoef+'×'+cc.cCoef+'）</span></b></div>'+
+      '<div><span>提成期限 / 截止</span><b>'+cc.years+' 年<span style="font-size:11px;color:var(--sub)">（'+(p.sopDate?addYears(p.sopDate,cc.years):'-')+'）</span></b></div>'+
+      '<div><span>量产提成总额</span><b style="color:var(--orange)">'+fmtRMB(cc.total)+'</b></div>'+
+      '<div><span>一次性定点提成</span><b>'+fmtRMB(num(p.oneTimeBonus))+'</b></div>'+
+      '<div><span>本单提成合计</span><b style="color:var(--red)">'+fmtRMB(grand)+'</b></div></div>'+
+      '<div class="ops"><button class="btn btn-g btn-sm" onclick="openProjectForm(\''+p.id+'\')">编辑</button>'+
+      '<button class="btn btn-g btn-sm" onclick="toggleProjStatus(\''+p.id+'\')">'+(p.status==='进行中'?'标记结束':'重新激活')+'</button>'+
+      '<button class="btn btn-r btn-sm" onclick="delProject(\''+p.id+'\')">删除</button></div></div>';
+  }).join(''):'<div class="card"><div class="empty">暂无项目。在 RFQ 状态推进到「赢单定点」后，点「+ 赢单转项目」。</div></div>';
+}
+function toggleProjStatus(id){const p=DB.projects.find(x=>x.id===id);p.status=p.status==='进行中'?'已结束':'进行中';save();}
+function delProject(id){if(!confirm('确认删除该项目？'))return;DB.projects=DB.projects.filter(p=>p.id!==id);save();}
+function ackMile(id,d){const p=DB.projects.find(x=>x.id===id);p.doneMile=p.doneMile||[];p.doneMile.push(d);save();}
+function openProjectForm(id,rfqId){
+  const p=id?DB.projects.find(x=>x.id===id):null;
+  const wonOpts=DB.rfqs.filter(r=>r.status==='赢单定点'&&(p?r.id===p.rfqId:true)).map(r=>
+    '<option value="'+r.id+'"'+((p&&p.rfqId===r.id)||rfqId===r.id?' selected':'')+'>'+esc(r.code+' · '+r.project)+'</option>').join('');
+  if(!wonOpts){alert('还没有「赢单定点」状态的 RFQ，请先在询价管理中推进状态。');return;}
+  const v=(k,d)=>p?(p[k]!=null?p[k]:''):(d||'');
+  openModal('<h3>'+(p?'编辑项目':'赢单转项目')+'<button class="x" onclick="closeModal()">✕</button></h3>'+
+  '<label class="f">关联赢单 RFQ（自动映射板块/客户类型/EAV/成本/单价/币种/汇率）</label>'+
+  '<select id="p_rfq" onchange="previewProjCalc()">'+wonOpts+'</select>'+
+  '<div class="fgrid">'+
+  '<div><label class="f">客户零件号 Customer P/N</label><input type="text" id="p_custPN" value="'+esc(v('custPN'))+'"></div>'+
+  '<div><label class="f">内部工程号 Internal P/N</label><input type="text" id="p_internalPN" value="'+esc(v('internalPN'))+'"></div>'+
+  '<div><label class="f">SAP 物料号 SAP Code</label><input type="text" id="p_sapCode" value="'+esc(v('sapCode'))+'"></div>'+
+  '<div><label class="f">一次性定点提成（RMB，手动）</label><input type="number" id="p_oneTime" value="'+esc(v('oneTimeBonus'))+'"></div>'+
+  '<div><label class="f">OTS 计划交样日</label><input type="date" id="p_ots" value="'+esc(v('otsDate'))+'"></div>'+
+  '<div><label class="f">PPAP 计划提交日</label><input type="date" id="p_ppap" value="'+esc(v('ppapDate'))+'"></div>'+
+  '<div><label class="f">SOP 量产日（提成起算锚点）</label><input type="date" id="p_sop" value="'+esc(v('sopDate'))+'"></div>'+
+  '</div>'+
+  '<div class="calcbar" id="projCalcBar"></div>'+
+  '<div style="display:flex;gap:10px;margin-top:16px;"><button class="btn btn-p" style="flex:1" onclick="saveProject(\''+(p?p.id:'')+'\')">保存</button>'+
+  '<button class="btn btn-g" onclick="closeModal()">取消</button></div>');
+  previewProjCalc();
+}
+function previewProjCalc(){
+  const r=DB.rfqs.find(x=>x.id===document.getElementById('p_rfq').value);
+  const cc=commCalc(r);if(!cc)return;
+  document.getElementById('projCalcBar').innerHTML=
+    '客户类型 <b>'+esc(cc.ctype)+'</b>　|　EAV <b>'+fmt(cc.eav,0)+'</b> 件　|　最终单价 <b>'+fmt(cc.fp)+' '+esc(r.currency)+'</b> @ '+r.fxRate+'<br>'+
+    '毛利率 <b>'+(cc.margin*100).toFixed(1)+'%</b>（'+(cc.margin<0.3?'&lt;30%，对赌系数 0.5':'≥30%，系数 1')+'）　|　提成比例 <b>'+(cc.rate*100).toFixed(2)+'%</b>　|　期限 <b>'+cc.years+' 年</b>　|　量产提成 <b>'+fmtRMB(cc.total)+'</b>';
+}
+function saveProject(id){
+  const g=i=>document.getElementById(i);
+  const data={rfqId:g('p_rfq').value,custPN:g('p_custPN').value.trim(),internalPN:g('p_internalPN').value.trim(),
+    sapCode:g('p_sapCode').value.trim(),oneTimeBonus:num(g('p_oneTime').value),
+    otsDate:g('p_ots').value,ppapDate:g('p_ppap').value,sopDate:g('p_sop').value};
+  if(id){Object.assign(DB.projects.find(x=>x.id===id),data);}
+  else{data.id=uid();data.status='进行中';data.doneMile=[];DB.projects.push(data);}
+  closeModal();save();
+}
+
+/* ============================================================
+   客户库
+============================================================ */
+function renderClientList(){
+  document.getElementById('clientList').innerHTML=DB.clients.length?DB.clients.map(c=>{
+    const rfqs=DB.rfqs.filter(r=>r.clientId===c.id).length;
+    return '<div class="item"><div class="head"><b>'+esc(c.code)+'</b>'+
+      '<span class="tag '+(c.type==='老客户'?'blue':'green')+'">'+esc(c.type)+'</span><span class="muted">'+esc(c.country||'')+'</span></div>'+
+      '<div class="meta"><span>'+esc(c.name)+'</span><span>'+rfqs+' 条 RFQ</span></div>'+
+      (c.plants&&c.plants.length?'<div class="nums" style="grid-template-columns:1fr;">'+c.plants.map(pl=>
+        '<div><span>'+esc(pl.name)+'</span><b style="font-size:13px;font-weight:500;">'+esc(pl.contact||'-')+' · '+esc(pl.title||'-')+' · '+esc(pl.email||'-')+'</b></div>').join('')+'</div>':'')+
+      '<div class="ops"><button class="btn btn-g btn-sm" onclick="openClientForm(\''+c.id+'\')">编辑</button>'+
+      '<button class="btn btn-r btn-sm" onclick="delClient(\''+c.id+'\')">删除</button></div></div>';
+  }).join(''):'<div class="card"><div class="empty">还没有客户档案。</div></div>';
+}
+function delClient(id){
+  if(DB.rfqs.some(r=>r.clientId===id)){alert('该客户下仍有 RFQ，请先处理关联询价。');return;}
+  if(!confirm('确认删除该客户？'))return;
+  DB.clients=DB.clients.filter(c=>c.id!==id);save();
+}
+function plantRowHTML(pl){
+  pl=pl||{};
+  return '<div class="fgrid" style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px;position:relative;">'+
+    '<div><label class="f">收货工厂名称</label><input type="text" class="pl_name" value="'+esc(pl.name||'')+'"></div>'+
+    '<div><label class="f">采购联系人</label><input type="text" class="pl_contact" value="'+esc(pl.contact||'')+'"></div>'+
+    '<div><label class="f">职位</label><input type="text" class="pl_title" value="'+esc(pl.title||'')+'"></div>'+
+    '<div><label class="f">邮箱</label><input type="email" class="pl_email" value="'+esc(pl.email||'')+'"></div>'+
+    '<button class="btn btn-r btn-sm" style="position:absolute;top:8px;right:8px;" onclick="this.parentNode.remove()">✕</button></div>';
+}
+function openClientForm(id){
+  const c=id?DB.clients.find(x=>x.id===id):null;
+  const v=(k,d)=>c?(c[k]!=null?c[k]:''):(d||'');
+  openModal('<h3>'+(c?'编辑客户':'新建客户')+'<button class="x" onclick="closeModal()">✕</button></h3>'+
+  '<div class="fgrid">'+
+  '<div><label class="f">集团代码（如 ZF）</label><input type="text" id="c_code" value="'+esc(v('code'))+'"></div>'+
+  '<div><label class="f">企业全称</label><input type="text" id="c_name" value="'+esc(v('name'))+'"></div>'+
+  '<div><label class="f">总部国家</label><input type="text" id="c_country" value="'+esc(v('country'))+'"></div>'+
+  '<div><label class="f">客户类型</label><select id="c_type"><option'+(v('type','新客户')==='新客户'?' selected':'')+'>新客户</option><option'+(v('type')==='老客户'?' selected':'')+'>老客户</option></select></div>'+
+  '</div>'+
+  '<label class="f">下属工厂与联系人</label><div id="plantRows">'+(c&&c.plants?c.plants.map(plantRowHTML).join(''):'')+'</div>'+
+  '<button class="btn btn-g btn-sm" onclick="document.getElementById(\'plantRows\').insertAdjacentHTML(\'beforeend\',plantRowHTML())">+ 添加工厂</button>'+
+  '<div style="display:flex;gap:10px;margin-top:16px;"><button class="btn btn-p" style="flex:1" onclick="saveClient(\''+(c?c.id:'')+'\')">保存</button>'+
+  '<button class="btn btn-g" onclick="closeModal()">取消</button></div>');
+}
+function saveClient(id){
+  const g=i=>document.getElementById(i);
+  const plants=Array.prototype.map.call(document.querySelectorAll('#plantRows > div'),row=>({
+    name:row.querySelector('.pl_name').value.trim(),contact:row.querySelector('.pl_contact').value.trim(),
+    title:row.querySelector('.pl_title').value.trim(),email:row.querySelector('.pl_email').value.trim()
+  })).filter(p=>p.name||p.contact);
+  const data={code:g('c_code').value.trim(),name:g('c_name').value.trim(),country:g('c_country').value.trim(),
+    type:g('c_type').value,plants:plants};
+  if(!data.code){alert('请填写集团代码');return;}
+  if(id)Object.assign(DB.clients.find(x=>x.id===id),data);
+  else{data.id=uid();DB.clients.push(data);}
+  closeModal();save();
+}
+
+/* ============================================================
+   数据备份：导出 / 导入 / 清空
+============================================================ */
+function exportJSON(){
+  const blob=new Blob([JSON.stringify({clients:DB.clients,rfqs:DB.rfqs,projects:DB.projects,todos:DB.todos},null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='外贸工作台备份_'+todayStr()+'.json';a.click();URL.revokeObjectURL(a.href);
+}
+function importJSON(ev){
+  const f=ev.target.files[0];if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      const d=JSON.parse(rd.result);
+      if(!d||typeof d!=='object')throw 0;
+      DB.clients=Array.isArray(d.clients)?d.clients:[];
+      DB.rfqs=Array.isArray(d.rfqs)?d.rfqs:[];
+      DB.projects=Array.isArray(d.projects)?d.projects:[];
+      DB.todos=Array.isArray(d.todos)?d.todos:[];
+      localStorage.setItem('wb_allen_init','1');
+      save();alert('导入成功：客户 '+DB.clients.length+' / RFQ '+DB.rfqs.length+' / 项目 '+DB.projects.length+' / 待办 '+DB.todos.length);
+    }catch(e){alert('文件格式不正确，导入失败。');}
+    ev.target.value='';
+  };
+  rd.readAsText(f);
+}
+function clearSamples(){
+  if(!confirm('将删除所有标记为示例的数据（不影响你自己录入的数据），继续？'))return;
+  DB.clients=DB.clients.filter(x=>!x.sample);DB.rfqs=DB.rfqs.filter(x=>!x.sample);
+  DB.projects=DB.projects.filter(x=>!x.sample);DB.todos=DB.todos.filter(x=>!x.sample);
+  save();
+}
+function clearAll(){
+  if(!confirm('⚠️ 将清空全部数据（客户/RFQ/项目/待办），此操作不可恢复！是否继续？'))return;
+  if(!confirm('请再次确认：建议先「导出 JSON 备份」。确定清空？'))return;
+  DB={clients:[],rfqs:[],projects:[],todos:[]};
+  save();
+}
+
+/* ---------- 弹窗 ---------- */
+function openModal(html){document.getElementById('modalBox').innerHTML=html;
+  document.getElementById('mask').classList.add('on');document.getElementById('modal').classList.add('on');}
+function closeModal(){document.getElementById('mask').classList.remove('on');document.getElementById('modal').classList.remove('on');}
+
+load();render();
+</script>
+</body>
+</html>
