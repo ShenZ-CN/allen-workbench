@@ -663,7 +663,9 @@ function openRFQForm(id){
   '<div class="fgrid">'+
   '<div><label class="f">RFQ ID（自定义主键）</label><input type="text" id="f_code" value="'+esc(v('code',nextCode))+'"></div>'+
   '<div><label class="f">关联客户（自动带出类型/联系人）</label><select id="f_client" onchange="syncPlants()">'+clientOpts+'</select></div>'+
-  '<div><label class="f">收货工厂 / 采购联系人（名字 · 邮箱）</label><select id="f_plant"></select></div>'+
+  '<div><label class="f">收货工厂</label><select id="f_plant" onchange="syncPlantInfo()"></select></div>'+
+  '<div><label class="f">采购联系人（自动带出）</label><input type="text" id="f_contact" placeholder="选择工厂后自动带出" readonly style="background:#f8fafc;"></div>'+
+  '<div><label class="f">联系人邮箱（自动带出）</label><input type="text" id="f_email" placeholder="选择工厂后自动带出" readonly style="background:#f8fafc;"></div>'+
   '<div><label class="f">项目名称</label><input type="text" id="f_project" value="'+esc(v('project'))+'"></div>'+
   '<div><label class="f">零件号 P/N</label><input type="text" id="f_partNo" value="'+esc(v('partNo'))+'"></div>'+
   '<div><label class="f">状态流水线</label><select id="f_status">'+STATUSES.map(s=>'<option'+(v('status','收到询价')===s?' selected':'')+'>'+s+'</option>').join('')+'</select></div>'+
@@ -691,12 +693,20 @@ function openRFQForm(id){
   syncPlants(r&&r.plantIdx!=null?r.plantIdx:-1);
   syncPricingArea(r?{lifecycle:r.lifecycle,demands:r.demands||{}}:null);
 }
-/* 客户联动：带出该集团下属工厂的联系人姓名与邮箱 */
+/* 客户联动：工厂下拉只列工厂名，联系人与邮箱自动带出到独立字段 */
 function syncPlants(selIdx){
   const c=DB.clients.find(x=>x.id===document.getElementById('f_client').value);
   const plants=c&&c.plants?c.plants:[];
   document.getElementById('f_plant').innerHTML='<option value="-1">（不指定）</option>'+
-    plants.map((p,i)=>'<option value="'+i+'"'+(selIdx===i?' selected':'')+'>'+esc(p.name||'工厂')+' · '+esc(p.contact||'-')+' · '+esc(p.email||'-')+'</option>').join('');
+    plants.map((p,i)=>'<option value="'+i+'"'+(selIdx===i?' selected':'')+'>'+esc(p.name||'工厂')+'</option>').join('');
+  syncPlantInfo();
+}
+function syncPlantInfo(){
+  const c=DB.clients.find(x=>x.id===document.getElementById('f_client').value);
+  const i=Number(document.getElementById('f_plant').value);
+  const p=(c&&c.plants&&i>=0)?c.plants[i]:null;
+  document.getElementById('f_contact').value=p?(p.contact||''):'';
+  document.getElementById('f_email').value=p?(p.email||''):'';
 }
 /* 读取当前阶梯区已填的值（用于重新生成时保留输入） */
 function currentPricingVals(){
@@ -994,11 +1004,11 @@ function exportRFQCSV(){
       r.sopYear,r.lifecycle,Object.keys(r.demands||{}).sort().map(y=>y+':'+r.demands[y]).join('; '),Math.round(cc.eav),
       r.currency,r.fxRate,r.cost,r.barePrice,r.moldFee,r.moldQty,fmt(amortOf(r)),fmt(cc.fp),
       (cc.margin*100).toFixed(1)+'%',r.lta+'%',r.ltaYears||0,Math.round(annualSalesOf(r)),
-      r.plant?r.plant.contact||'':'',r.plant?r.plant.email||'':'',
+      r.plant?r.plant.name||'':'',r.plant?r.plant.contact||'':'',r.plant?r.plant.email||'':'',
       (r.revs||[]).map(v=>v.ver+' '+v.date+' '+v.price).join('; ')];
   });
   downloadCSV('RFQ询价导出_'+todayStr()+'.csv',
-    ['RFQ ID','客户代码','客户名称','客户类型','项目名称','零件号','业务板块','产品细分','状态','SOP年份','生命周期(年)','阶梯需求(年:量)','EAV年均','币种','报价汇率','单件成本','单件裸价','模具总费','模具分摊数量','单件分摊额','最终对外单价','核算毛利率','LTA年降','年降年数','年均销售额(RMB)','采购联系人','联系人邮箱','Rev报价历史'],rows);
+    ['RFQ ID','客户代码','客户名称','客户类型','项目名称','零件号','业务板块','产品细分','状态','SOP年份','生命周期(年)','阶梯需求(年:量)','EAV年均','币种','报价汇率','单件成本','单件裸价','模具总费','模具分摊数量','单件分摊额','最终对外单价','核算毛利率','LTA年降','年降年数','年均销售额(RMB)','收货工厂','采购联系人','联系人邮箱','Rev报价历史'],rows);
 }
 function exportProjCSV(){
   if(!DB.projects.length){alert('暂无项目数据');return;}
