@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Allen 外贸提成工作台</title>
+<title>Shen·外贸工作台</title>
 <style>
   :root{
     --blue:#2563eb; --blue-d:#1e40af; --bg:#f5f7fa; --card:#ffffff; --line:#e5e9f0;
@@ -163,7 +163,7 @@
 <header>
   <h1>
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
-    Allen · 外贸提成工作台
+    Shen · 外贸工作台
   </h1>
   <div class="sub">欧洲汽车零部件 & 轴承保持架 · RFQ → 定点 → 提成 全链路</div>
   <div class="databar">
@@ -202,7 +202,7 @@
     <div class="card">
       <h2><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2" stroke-linecap="round"><path d="M3 17l6-6 4 4 8-8m0 0h-5m5 0v5"/></svg>实时汇率 EUR / USD</h2>
       <iframe class="fx-frame" src="fx.html" title="实时汇率" loading="lazy"></iframe>
-      <div class="muted" style="margin-top:6px;">汇率数据来自 TradingView，需联网加载；其余功能离线可用。</div>
+      <div class="muted" style="margin-top:6px;">汇率数据来自 Frankfurter（欧洲央行基准价），需联网加载；其余功能离线可用。</div>
     </div>
 
     <div class="card">
@@ -254,7 +254,7 @@
   <!-- ================= 项目提成 ================= -->
   <section class="tabpage" id="page-proj">
     <div class="sec-add">
-      <h2 style="font-size:17px;">项目与提成引擎 APQP & Commission</h2>
+      <h2 style="font-size:17px;">项目管理 · APQP & 提成引擎</h2>
       <button class="btn btn-p" onclick="openProjectForm()">+ 赢单转项目</button>
     </div>
     <div id="projList"></div>
@@ -410,7 +410,7 @@ function rfqOfProject(p){return DB.rfqs.find(r=>r.id===p.rfqId)||null;}
 const TABS=[
   {id:'dash',name:'看板',icon:'<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>'},
   {id:'rfq',name:'询价',icon:'<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 13h6m-6 4h6"/>'},
-  {id:'proj',name:'提成',icon:'<circle cx="12" cy="12" r="9"/><path d="M12 7v10m3-8.5c-.7-1-1.8-1.5-3-1.5-1.8 0-3 1-3 2.5s1.2 2 3 2.5 3 1 3 2.5-1.2 2.5-3 2.5c-1.2 0-2.3-.5-3-1.5"/>'},
+  {id:'proj',name:'项目',icon:'<circle cx="12" cy="12" r="9"/><path d="M12 7v10m3-8.5c-.7-1-1.8-1.5-3-1.5-1.8 0-3 1-3 2.5s1.2 2 3 2.5 3 1 3 2.5-1.2 2.5-3 2.5c-1.2 0-2.3-.5-3-1.5"/>'},
   {id:'client',name:'客户',icon:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5M16 4.5a3.5 3.5 0 010 7m5.5 8.5c-.4-2.4-1.7-4.1-3.5-5"/>'}
 ];
 let curTab='dash';

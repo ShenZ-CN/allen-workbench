@@ -3,97 +3,132 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>实时汇率挂件 · EUR/CNY USD/CNY</title>
+<title>实时汇率 · EUR/CNY USD/CNY</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { height: 100%; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: #ffffff;
-    display: flex;
-    flex-direction: column;
+    background: #ffffff; color: #1f2937; padding: 12px 14px;
   }
-  .ticker-wrap { flex: 0 0 auto; border-bottom: 1px solid #eef0f2; }
-  .charts {
-    flex: 1 1 auto;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1px;
-    background: #eef0f2;
-    min-height: 260px;
+  .rates { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .rate-card {
+    border: 1px solid #e5e9f0; border-radius: 12px; padding: 10px 12px;
+    background: linear-gradient(135deg, #f8fafc, #eef4ff);
   }
-  .chart-cell { background: #ffffff; position: relative; }
-  .tradingview-widget-container { width: 100%; height: 100%; }
-  .tradingview-widget-container__widget { width: 100%; height: 100%; }
+  .rate-card .pair { font-size: 12px; color: #6b7280; font-weight: 600; }
+  .rate-card .val { font-size: 22px; font-weight: 800; color: #1e40af; margin-top: 2px; }
+  .rate-card .chg { font-size: 11px; margin-top: 2px; font-weight: 600; }
+  .up { color: #dc2626; } .down { color: #16a34a; } .flat { color: #9ca3af; }
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .chart-box { border: 1px solid #e5e9f0; border-radius: 12px; padding: 8px 10px; }
+  .chart-box .t { font-size: 12px; color: #6b7280; font-weight: 600; margin-bottom: 4px; }
+  .foot { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 11px; color: #9ca3af; }
+  .rbtn {
+    border: 1px solid #e5e9f0; background: #fff; border-radius: 8px; padding: 4px 12px;
+    font-size: 12px; cursor: pointer; color: #2563eb; font-weight: 600; min-height: 30px;
+  }
+  .rbtn:hover { background: #eff6ff; }
+  .err { color: #dc2626; font-size: 12.5px; padding: 16px 4px; }
   @media (max-width: 640px) {
+    .rates { grid-template-columns: 1fr 1fr; }
     .charts { grid-template-columns: 1fr; }
+    .rate-card .val { font-size: 19px; }
   }
 </style>
 </head>
 <body>
 
-<!-- 顶部：汇率行情滚动带 -->
-<div class="ticker-wrap">
-  <div class="tradingview-widget-container" style="height:46px;">
-    <div class="tradingview-widget-container__widget"></div>
-    <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
-    {
-      "symbols": [
-        { "proName": "FX_IDC:EURCNY", "title": "欧元 / 人民币" },
-        { "proName": "FX_IDC:USDCNY", "title": "美元 / 人民币" },
-        { "proName": "FX:EURUSD", "title": "欧元 / 美元" }
-      ],
-      "showSymbolLogo": true,
-      "isTransparent": true,
-      "displayMode": "adaptive",
-      "colorTheme": "light",
-      "locale": "zh_CN"
-    }
-    </script>
-  </div>
+<div class="rates">
+  <div class="rate-card"><div class="pair">欧元 / 人民币 EUR/CNY</div><div class="val" id="v_eurcny">--</div><div class="chg flat" id="c_eurcny"></div></div>
+  <div class="rate-card"><div class="pair">美元 / 人民币 USD/CNY</div><div class="val" id="v_usdcny">--</div><div class="chg flat" id="c_usdcny"></div></div>
+  <div class="rate-card"><div class="pair">欧元 / 美元 EUR/USD</div><div class="val" id="v_eurusd">--</div><div class="chg flat" id="c_eurusd"></div></div>
 </div>
 
-<!-- 下方：EUR/CNY 与 USD/CNY 迷你走势图 -->
 <div class="charts">
-  <div class="chart-cell">
-    <div class="tradingview-widget-container">
-      <div class="tradingview-widget-container__widget"></div>
-      <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js" async>
-      {
-        "symbol": "FX_IDC:EURCNY",
-        "width": "100%",
-        "height": "100%",
-        "locale": "zh_CN",
-        "dateRange": "6M",
-        "colorTheme": "light",
-        "isTransparent": true,
-        "autosize": true,
-        "largeChartUrl": "",
-        "chartOnly": false
-      }
-      </script>
-    </div>
-  </div>
-  <div class="chart-cell">
-    <div class="tradingview-widget-container">
-      <div class="tradingview-widget-container__widget"></div>
-      <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js" async>
-      {
-        "symbol": "FX_IDC:USDCNY",
-        "width": "100%",
-        "height": "100%",
-        "locale": "zh_CN",
-        "dateRange": "6M",
-        "colorTheme": "light",
-        "isTransparent": true,
-        "autosize": true,
-        "largeChartUrl": "",
-        "chartOnly": false
-      }
-      </script>
-    </div>
-  </div>
+  <div class="chart-box"><div class="t">EUR/CNY 近 6 个月</div><div id="chart_eurcny"></div></div>
+  <div class="chart-box"><div class="t">USD/CNY 近 6 个月</div><div id="chart_usdcny"></div></div>
 </div>
 
+<div class="foot">
+  <span id="srcNote">数据源：Frankfurter（欧洲央行基准价）</span>
+  <button class="rbtn" onclick="loadAll()">刷新</button>
+</div>
+<div id="errBox"></div>
+
+<script>
+function fmtDate(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function setRate(id,chgId,val,prev){
+  document.getElementById(id).textContent=val==null?'--':Number(val).toFixed(4);
+  const el=document.getElementById(chgId);
+  if(val!=null&&prev!=null){
+    const diff=val-prev,pct=diff/prev*100;
+    el.className='chg '+(diff>0.00005?'up':diff<-0.00005?'down':'flat');
+    el.textContent=(diff>0.00005?'▲ 较上日 +':diff<-0.00005?'▼ 较上日 ':'— 持平 ')+ (diff>0.00005||diff<-0.00005?Math.abs(diff).toFixed(4)+' ('+pct.toFixed(2)+'%)':'');
+  }else el.textContent='';
+}
+function drawChart(elId,points,color){
+  const el=document.getElementById(elId);
+  if(!points||points.length<2){el.innerHTML='<div style="font-size:11px;color:#9ca3af;padding:8px 0;">历史走势暂不可用</div>';return;}
+  const W=560,H=110,P=6;
+  const vals=points.map(p=>p[1]),min=Math.min.apply(null,vals),max=Math.max.apply(null,vals),span=(max-min)||1;
+  const X=i=>P+i/(points.length-1)*(W-2*P);
+  const Y=v=>H-P-(v-min)/span*(H-2*P);
+  let line='',area='M'+X(0)+' '+Y(vals[0]);
+  points.forEach((p,i)=>{line+=(i===0?'M':'L')+X(i).toFixed(1)+' '+Y(p[1]).toFixed(1)+' ';area+=' L'+X(i).toFixed(1)+' '+Y(p[1]).toFixed(1);});
+  area+=' L'+X(points.length-1).toFixed(1)+' '+(H-P)+' L'+X(0)+' '+(H-P)+' Z';
+  el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;display:block">'+
+    '<path d="'+area+'" fill="'+color+'18"/>'+
+    '<path d="'+line+'" fill="none" stroke="'+color+'" stroke-width="2"/>'+
+    '<circle cx="'+X(points.length-1)+'" cy="'+Y(vals[vals.length-1])+'" r="3.5" fill="'+color+'"/>'+
+    '<text x="'+P+'" y="'+(P+9)+'" font-size="10" fill="#9ca3af">高 '+max.toFixed(3)+'</text>'+
+    '<text x="'+P+'" y="'+(H-2)+'" font-size="10" fill="#9ca3af">低 '+min.toFixed(3)+'</text>'+
+    '</svg>';
+}
+async function fetchJSON(url){
+  const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),8000);
+  try{const r=await fetch(url,{signal:ctl.signal});if(!r.ok)throw new Error(r.status);return await r.json();}
+  finally{clearTimeout(to);}
+}
+async function loadAll(){
+  document.getElementById('errBox').innerHTML='';
+  const today=new Date(),d180=new Date(today.getTime()-183*86400000);
+  const rng=fmtDate(d180)+'..'+fmtDate(today);
+  try{
+    const [eur,usd,eu]=await Promise.all([
+      fetchJSON('https://api.frankfurter.dev/v1/'+rng+'?base=EUR&symbols=CNY'),
+      fetchJSON('https://api.frankfurter.dev/v1/'+rng+'?base=USD&symbols=CNY'),
+      fetchJSON('https://api.frankfurter.dev/v1/latest?base=EUR&symbols=USD')
+    ]);
+    const ep=Object.keys(eur.rates).sort().map(k=>[k,eur.rates[k].CNY]);
+    const up=Object.keys(usd.rates).sort().map(k=>[k,usd.rates[k].CNY]);
+    const lastE=ep[ep.length-1],prevE=ep.length>1?ep[ep.length-2]:null;
+    const lastU=up[up.length-1],prevU=up.length>1?up[up.length-2]:null;
+    setRate('v_eurcny','c_eurcny',lastE?lastE[1]:null,prevE?prevE[1]:null);
+    setRate('v_usdcny','c_usdcny',lastU?lastU[1]:null,prevU?prevU[1]:null);
+    const eunow=eu&&eu.rates?eu.rates.USD:null;
+    const euprev=(prevE&&prevU&&prevU[1])?prevE[1]/prevU[1]:null;
+    setRate('v_eurusd','c_eurusd',eunow,euprev);
+    drawChart('chart_eurcny',ep,'#2563eb');
+    drawChart('chart_usdcny',up,'#0d9488');
+    document.getElementById('srcNote').textContent='数据源：Frankfurter（欧洲央行基准价）· 更新于 '+(lastE?lastE[0]:'--');
+  }catch(e){
+    /* 备用源：open.er-api.com（仅最新价，无历史） */
+    try{
+      const [a,b]=await Promise.all([
+        fetchJSON('https://open.er-api.com/v6/latest/EUR'),
+        fetchJSON('https://open.er-api.com/v6/latest/USD')
+      ]);
+      setRate('v_eurcny','c_eurcny',a.rates.CNY,null);
+      setRate('v_usdcny','c_usdcny',b.rates.CNY,null);
+      setRate('v_eurusd','c_eurusd',a.rates.USD,null);
+      drawChart('chart_eurcny',null);drawChart('chart_usdcny',null);
+      document.getElementById('srcNote').textContent='数据源：ER-API · 更新于 '+(a.time_last_update_utc||'--').slice(0,16);
+    }catch(e2){
+      document.getElementById('errBox').innerHTML='<div class="err">汇率数据加载失败，请检查网络后点击「刷新」重试。</div>';
+    }
+  }
+}
+loadAll();
+</script>
 </body>
 </html>
