@@ -536,11 +536,17 @@ function renderDonut(){
   const legs=[];
   Object.keys(agg).forEach(k=>{
     const frac=agg[k]/total,a1=a0+frac*Math.PI*2,large=frac>0.5?1:0;
-    const x0=cx+R*Math.cos(a0),y0=cy+R*Math.sin(a0),x1=cx+R*Math.cos(a1),y1=cy+R*Math.sin(a1);
-    const xi1=cx+r*Math.cos(a1),yi1=cy+r*Math.sin(a1),xi0=cx+r*Math.cos(a0),yi0=cy+r*Math.sin(a0);
-    s+='<path d="M'+x0+' '+y0+' A'+R+' '+R+' 0 '+large+' 1 '+x1+' '+y1+' L'+xi1+' '+yi1+' A'+r+' '+r+' 0 '+large+' 0 '+xi0+' '+yi0+' Z" fill="'+SEG_COLOR[k]+'"/>';
-    const mid=(a0+a1)/2,lx=cx+(R+14)*Math.cos(mid),ly=cy+(R+14)*Math.sin(mid);
-    s+='<text x="'+lx+'" y="'+ly+'" font-size="11" fill="#374151" text-anchor="'+(Math.cos(mid)>0.2?'start':Math.cos(mid)<-0.2?'end':'middle')+'">'+(frac*100).toFixed(0)+'%</text>';
+    if(frac>0.9999){
+      /* 单一板块占 100% 时弧线起终点重合会被浏览器吞掉，改用整圆环 */
+      s+='<circle cx="'+cx+'" cy="'+cy+'" r="'+((R+r)/2)+'" fill="none" stroke="'+SEG_COLOR[k]+'" stroke-width="'+(R-r)+'"/>'+
+         '<text x="'+(cx+R+14)+'" y="'+cy+'" font-size="11" fill="#374151">100%</text>';
+    }else{
+      const x0=cx+R*Math.cos(a0),y0=cy+R*Math.sin(a0),x1=cx+R*Math.cos(a1),y1=cy+R*Math.sin(a1);
+      const xi1=cx+r*Math.cos(a1),yi1=cy+r*Math.sin(a1),xi0=cx+r*Math.cos(a0),yi0=cy+r*Math.sin(a0);
+      s+='<path d="M'+x0+' '+y0+' A'+R+' '+R+' 0 '+large+' 1 '+x1+' '+y1+' L'+xi1+' '+yi1+' A'+r+' '+r+' 0 '+large+' 0 '+xi0+' '+yi0+' Z" fill="'+SEG_COLOR[k]+'"/>';
+      const mid=(a0+a1)/2,lx=cx+(R+14)*Math.cos(mid),ly=cy+(R+14)*Math.sin(mid);
+      s+='<text x="'+lx+'" y="'+ly+'" font-size="11" fill="#374151" text-anchor="'+(Math.cos(mid)>0.2?'start':Math.cos(mid)<-0.2?'end':'middle')+'">'+(frac*100).toFixed(0)+'%</text>';
+    }
     legs.push('<span><i class="dot" style="background:'+SEG_COLOR[k]+'"></i>'+k+' · '+fmtRMB(agg[k])+'</span>');
     a0=a1;
   });
