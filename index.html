@@ -246,8 +246,13 @@
   <section class="tabpage" id="page-rfq">
     <div class="sec-add">
       <h2 style="font-size:17px;">询价管理 RFQ Tracker</h2>
-      <button class="btn btn-p" onclick="openRFQForm()">+ 新建询价</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-g" onclick="openBatchForm()">批量创建</button>
+        <button class="btn btn-g" onclick="exportRFQCSV()">导出 Excel</button>
+        <button class="btn btn-p" onclick="openRFQForm()">+ 新建询价</button>
+      </div>
     </div>
+    <input type="text" id="rfqSearch" placeholder="搜索：RFQ ID / 项目名称 / 零件号…" style="margin-bottom:12px;" oninput="rfqQuery=this.value;renderRFQList()">
     <div id="rfqList"></div>
   </section>
 
@@ -255,8 +260,12 @@
   <section class="tabpage" id="page-proj">
     <div class="sec-add">
       <h2 style="font-size:17px;">项目管理 · APQP & 提成引擎</h2>
-      <button class="btn btn-p" onclick="openProjectForm()">+ 赢单转项目</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-g" onclick="exportProjCSV()">导出 Excel</button>
+        <button class="btn btn-p" onclick="openProjectForm()">+ 赢单转项目</button>
+      </div>
     </div>
+    <input type="text" id="projSearch" placeholder="搜索：RFQ ID / 项目名称 / 零件号 / SAP号…" style="margin-bottom:12px;" oninput="projQuery=this.value;renderProjList()">
     <div id="projList"></div>
   </section>
 
@@ -318,6 +327,8 @@ function migrate(){
     }
     if(r.ltaYears===undefined)r.ltaYears=num(r.lta)>0?3:0;
   });
+  /* 项目模型升级：单 rfqId → rfqIds 数组（支持同项目多零件合并） */
+  DB.projects.forEach(p=>{if(p.rfqId!==undefined){if(!p.rfqIds)p.rfqIds=[p.rfqId];delete p.rfqId;}});
 }
 function load(){
   for(const k in LS){try{DB[k]=JSON.parse(localStorage.getItem(LS[k]))||[];}catch(e){DB[k]=[];}}
@@ -337,26 +348,27 @@ function seed(){
     {name:'Schaeffler 黑措根奥拉赫工厂',contact:'Anna Weber',title:'Commodity Buyer',email:'anna.weber@schaeffler.com'}]};
   const c3={id:uid(),code:'GKN',name:'GKN Automotive',country:'英国',type:'新客户',sample:true,plants:[]};
   DB.clients=[c1,c2,c3];
-  const r3={id:uid(),code:'RFQ-26-003',clientId:c1.id,project:'ZF 8HP 变速箱保持架',segment:'保持架',subcat:'小TRB',
+  const r3={id:uid(),code:'RFQ-26-003',clientId:c1.id,project:'ZF 8HP 变速箱保持架',partNo:'1358.301.024',
+    plantIdx:0,plant:{name:'ZF 腓特烈港工厂',contact:'Hans Müller',email:'hans.mueller@zf.com'},segment:'保持架',subcat:'小TRB',
     sopYear:2026,lifecycle:5,demands:{'2026':300000,'2027':500000,'2028':600000,'2029':600000,'2030':500000},
     currency:'EUR',fxRate:7.85,cost:6.1,barePrice:8.6,moldFee:400000,moldQty:2500000,lta:2,ltaYears:3,rebate:1.5,
     status:'赢单定点',sample:true,revs:[{ver:'Rev1',date:'2026-02-10',price:9.2,note:'首轮报价'},{ver:'Rev2',date:'2026-03-05',price:8.6,note:'VA/VE 后定点价'}]};
   DB.rfqs=[
-    {id:uid(),code:'RFQ-26-001',clientId:c1.id,project:'ZF 电驱桥大TRB保持架',segment:'保持架',subcat:'大TRB',
+    {id:uid(),code:'RFQ-26-001',clientId:c1.id,project:'ZF 电驱桥大TRB保持架',partNo:'0735.320.611',segment:'保持架',subcat:'大TRB',
       sopYear:2027,lifecycle:6,demands:{'2027':200000,'2028':350000,'2029':400000,'2030':400000,'2031':400000,'2032':350000},
       currency:'EUR',fxRate:7.85,cost:8.2,barePrice:11.5,moldFee:600000,moldQty:1000000,lta:3,ltaYears:3,rebate:2,
       status:'技术评审中',sample:true,revs:[{ver:'R1',date:'2026-06-18',price:11.5,note:'Round 1 提交'}]},
-    {id:uid(),code:'RFQ-26-002',clientId:c2.id,project:'Schaeffler 精冲法兰盘',segment:'汽车零部件',subcat:'精冲件',
+    {id:uid(),code:'RFQ-26-002',clientId:c2.id,project:'Schaeffler 精冲法兰盘',partNo:'F-2345.77',segment:'汽车零部件',subcat:'精冲件',
       sopYear:2027,lifecycle:5,demands:{'2027':150000,'2028':280000,'2029':300000,'2030':300000,'2031':250000},
       currency:'EUR',fxRate:7.82,cost:4.4,barePrice:5.9,moldFee:220000,moldQty:800000,lta:2,ltaYears:3,rebate:0,
       status:'Round 2+ 提交',sample:true,revs:[]},
     r3,
-    {id:uid(),code:'RFQ-26-004',clientId:c3.id,project:'GKN 防尘盖（EGC）',segment:'EGC',subcat:'防尘盖',
+    {id:uid(),code:'RFQ-26-004',clientId:c3.id,project:'GKN 防尘盖（EGC）',partNo:'GC-8801',segment:'EGC',subcat:'防尘盖',
       sopYear:2027,lifecycle:4,demands:{'2027':80000,'2028':120000,'2029':120000,'2030':100000},
       currency:'USD',fxRate:7.15,cost:1.1,barePrice:1.55,moldFee:60000,moldQty:400000,lta:0,ltaYears:0,rebate:0,
       status:'收到询价',sample:true,created:addDays(todayStr(),-4),revs:[]}
   ];
-  DB.projects=[{id:uid(),rfqId:r3.id,custPN:'ZF-1358-301-024',internalPN:'EG-C-26031',sapCode:'SAP-80001122',
+  DB.projects=[{id:uid(),rfqIds:[r3.id],custPN:'ZF-1358-301-024',internalPN:'EG-C-26031',sapCode:'SAP-80001122',
     otsDate:'2026-01-15',ppapDate:'2026-04-30',sopDate:'2026-08-20',oneTimeBonus:3000,status:'进行中',
     doneMile:['2026-01-15'],sample:true}];
   DB.todos=[
@@ -402,7 +414,10 @@ function commCalc(r){
   const total=fp*num(r.fxRate)*eav*rate*years;
   return {margin,base,mCoef,cCoef,rate,years,eav,fp,total,ctype,client};
 }
-function rfqOfProject(p){return DB.rfqs.find(r=>r.id===p.rfqId)||null;}
+function rfqIdsOf(p){return p.rfqIds||(p.rfqId?[p.rfqId]:[]);}
+function rfqOfProject(p){const ids=rfqIdsOf(p);return DB.rfqs.find(r=>r.id===ids[0])||null;}
+function rfqsOfProject(p){return rfqIdsOf(p).map(id=>DB.rfqs.find(r=>r.id===id)).filter(Boolean);}
+function projCommSum(p){return rfqsOfProject(p).reduce((s,r)=>{const c=commCalc(r);return s+(c?c.total:0);},0);}
 
 /* ============================================================
    渲染框架
@@ -414,6 +429,7 @@ const TABS=[
   {id:'client',name:'客户',icon:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5M16 4.5a3.5 3.5 0 010 7m5.5 8.5c-.4-2.4-1.7-4.1-3.5-5"/>'}
 ];
 let curTab='dash';
+let rfqQuery='',projQuery='';
 function buildTabs(){
   document.getElementById('tabsPC').innerHTML=TABS.map(t=>
     '<button data-t="'+t.id+'" class="'+(t.id===curTab?'on':'')+'" onclick="switchTab(\''+t.id+'\')">'+t.name+'</button>').join('');
@@ -469,7 +485,7 @@ function renderKPI(){
   const act=DB.projects.filter(p=>p.status==='进行中');
   const eavPan=DB.rfqs.filter(r=>r.status!=='丢单').reduce((s,r)=>s+eavOf(r),0);
   const spotPool=act.reduce((s,p)=>s+num(p.oneTimeBonus),0);
-  const massPool=act.reduce((s,p)=>{const c=commCalc(rfqOfProject(p));return s+(c?c.total:0);},0);
+  const massPool=act.reduce((s,p)=>s+projCommSum(p),0);
   document.getElementById('kpiGrid').innerHTML=
     '<div class="kpi k1"><div class="lab">进行中项目数</div><div class="num">'+act.length+'</div></div>'+
     '<div class="kpi k2"><div class="lab">EAV 总盘面（件/年）</div><div class="num">'+fmt(eavPan,0)+'</div></div>'+
@@ -600,11 +616,15 @@ function statusTag(st){
   return '<span class="tag '+(map[st]||'blue')+'">'+esc(st)+'</span>';
 }
 function renderRFQList(){
-  document.getElementById('rfqList').innerHTML=DB.rfqs.length?DB.rfqs.map(r=>{
-    const c=clientOf(r);const cc=commCalc(r);const linked=DB.projects.some(p=>p.rfqId===r.id);
+  const q=rfqQuery.trim().toLowerCase();
+  const list=DB.rfqs.filter(r=>!q||(r.code||'').toLowerCase().includes(q)||(r.project||'').toLowerCase().includes(q)||(r.partNo||'').toLowerCase().includes(q));
+  document.getElementById('rfqList').innerHTML=list.length?list.map(r=>{
+    const c=clientOf(r);const cc=commCalc(r);const linked=DB.projects.some(p=>rfqIdsOf(p).includes(r.id));
     return '<div class="item"><div class="head"><b>'+esc(r.code)+'</b>'+statusTag(r.status)+
+      (r.partNo?'<span class="tag blue">P/N '+esc(r.partNo)+'</span>':'')+
       '<span class="tag" style="background:'+SEG_COLOR[r.segment]+'22;color:'+SEG_COLOR[r.segment]+'">'+esc(r.segment)+'-'+esc(r.subcat)+'</span></div>'+
       '<div class="meta"><span>'+esc(c?c.code+' · '+c.name:'未关联客户')+'</span><span>'+esc(r.project)+'</span>'+
+      (r.plant&&(r.plant.contact||r.plant.email)?'<span>联系人 '+esc(r.plant.contact||'-')+'（'+esc(r.plant.email||'-')+'）</span>':'')+
       '<span>SOP '+esc(r.sopYear||'-')+' / 周期 '+esc(r.lifecycle||'-')+'年 · 阶梯需求</span>'+
       (r.revs&&r.revs.length?'<span>'+r.revs.length+' 次 Rev 报价</span>':'')+'</div>'+
       '<div class="nums">'+
@@ -616,9 +636,9 @@ function renderRFQList(){
       (num(r.ltaYears)>0?'<div class="meta" style="margin-top:6px;"><span style="color:var(--orange)">年降 '+esc(r.lta)+'% × '+esc(r.ltaYears)+'年：</span><span>'+priceLadder(r).map(p=>p.year+' '+fmt(p.price)).join(' → ')+' '+esc(r.currency)+'</span></div>':'')+
       '<div class="ops"><button class="btn btn-g btn-sm" onclick="openRFQForm(\''+r.id+'\')">编辑 / Rev 历史</button>'+
       '<button class="btn btn-g btn-sm" onclick="advanceRFQ(\''+r.id+'\')">推进状态 →</button>'+
-      (r.status==='赢单定点'&&!linked?'<button class="btn btn-p btn-sm" onclick="openProjectForm(null,\''+r.id+'\')">转入提成库</button>':'')+
+      (r.status==='赢单定点'&&!linked?'<button class="btn btn-p btn-sm" onclick="openProjectForm(null,\''+r.id+'\')">转入项目库</button>':'')+
       '<button class="btn btn-r btn-sm" onclick="delRFQ(\''+r.id+'\')">删除</button></div></div>';
-  }).join(''):'<div class="card"><div class="empty">还没有询价记录，点击右上角「+ 新建询价」。</div></div>';
+  }).join(''):'<div class="card"><div class="empty">'+(q?'没有匹配的 RFQ，换个关键词试试。':'还没有询价记录，点击右上角「+ 新建询价」。')+'</div></div>';
 }
 function advanceRFQ(id){
   const r=DB.rfqs.find(x=>x.id===id);if(!r)return;
@@ -629,19 +649,23 @@ function advanceRFQ(id){
 }
 function delRFQ(id){
   if(!confirm('确认删除该 RFQ？关联项目将失去联动数据。'))return;
-  DB.rfqs=DB.rfqs.filter(r=>r.id!==id);save();
+  DB.rfqs=DB.rfqs.filter(r=>r.id!==id);
+  DB.projects.forEach(p=>{if(p.rfqIds)p.rfqIds=p.rfqIds.filter(x=>x!==id);});
+  save();
 }
 function openRFQForm(id){
   const r=id?DB.rfqs.find(x=>x.id===id):null;
   const v=(k,d)=>r?(r[k]!=null?r[k]:''):(d||'');
-  const nextCode='RFQ-26-'+String(DB.rfqs.length+1).padStart(3,'0');
+  const nextCode=nextRFQCode();
   const clientOpts=DB.clients.map(c=>'<option value="'+c.id+'"'+(r&&r.clientId===c.id?' selected':'')+'>'+esc(c.code+' · '+c.name)+'</option>').join('');
   const revs=(r&&r.revs)||[];
   openModal('<h3>'+(r?'编辑询价':'新建询价')+'<button class="x" onclick="closeModal()">✕</button></h3>'+
   '<div class="fgrid">'+
   '<div><label class="f">RFQ ID（自定义主键）</label><input type="text" id="f_code" value="'+esc(v('code',nextCode))+'"></div>'+
-  '<div><label class="f">关联客户（自动带出类型/联系人）</label><select id="f_client">'+clientOpts+'</select></div>'+
+  '<div><label class="f">关联客户（自动带出类型/联系人）</label><select id="f_client" onchange="syncPlants()">'+clientOpts+'</select></div>'+
+  '<div><label class="f">收货工厂 / 采购联系人（名字 · 邮箱）</label><select id="f_plant"></select></div>'+
   '<div><label class="f">项目名称</label><input type="text" id="f_project" value="'+esc(v('project'))+'"></div>'+
+  '<div><label class="f">零件号 P/N</label><input type="text" id="f_partNo" value="'+esc(v('partNo'))+'"></div>'+
   '<div><label class="f">状态流水线</label><select id="f_status">'+STATUSES.map(s=>'<option'+(v('status','收到询价')===s?' selected':'')+'>'+s+'</option>').join('')+'</select></div>'+
   '<div><label class="f">业务板块（大类）</label><select id="f_segment" onchange="syncSubcat();syncPricingArea()">'+SEGMENTS.map(s=>'<option'+(v('segment','保持架')===s?' selected':'')+'>'+s+'</option>').join('')+'</select></div>'+
   '<div><label class="f">产品细分（子类）</label><select id="f_subcat" onchange="syncPricingArea()"></select></div>'+
@@ -664,7 +688,15 @@ function openRFQForm(id){
   '<div style="display:flex;gap:10px;margin-top:16px;"><button class="btn btn-p" style="flex:1" onclick="saveRFQ(\''+(r?r.id:'')+'\')">保存</button>'+
   '<button class="btn btn-g" onclick="closeModal()">取消</button></div>');
   syncSubcat(r?r.subcat:null);
+  syncPlants(r&&r.plantIdx!=null?r.plantIdx:-1);
   syncPricingArea(r?{lifecycle:r.lifecycle,demands:r.demands||{}}:null);
+}
+/* 客户联动：带出该集团下属工厂的联系人姓名与邮箱 */
+function syncPlants(selIdx){
+  const c=DB.clients.find(x=>x.id===document.getElementById('f_client').value);
+  const plants=c&&c.plants?c.plants:[];
+  document.getElementById('f_plant').innerHTML='<option value="-1">（不指定）</option>'+
+    plants.map((p,i)=>'<option value="'+i+'"'+(selIdx===i?' selected':'')+'>'+esc(p.name||'工厂')+' · '+esc(p.contact||'-')+' · '+esc(p.email||'-')+'</option>').join('');
 }
 /* 读取当前阶梯区已填的值（用于重新生成时保留输入） */
 function currentPricingVals(){
@@ -706,7 +738,11 @@ function readRFQForm(){
   const g=id=>document.getElementById(id);
   const ds={};document.querySelectorAll('.f_dy').forEach(i=>{if(i.value!=='')ds[i.dataset.y]=num(i.value);});
   const le=g('f_lifecycle');
+  const pIdx=g('f_plant')?Number(g('f_plant').value):-1;
+  const cli=DB.clients.find(x=>x.id===g('f_client').value);
+  const plant=(cli&&cli.plants&&pIdx>=0&&cli.plants[pIdx])?{name:cli.plants[pIdx].name,contact:cli.plants[pIdx].contact,email:cli.plants[pIdx].email}:null;
   return {code:g('f_code').value.trim()||'RFQ-?',clientId:g('f_client').value,project:g('f_project').value.trim(),
+    partNo:g('f_partNo').value.trim(),plantIdx:pIdx,plant:plant,
     status:g('f_status').value,segment:g('f_segment').value,subcat:g('f_subcat').value,
     sopYear:num(g('f_sopYear').value),lifecycle:le?num(le.value):'',demands:ds,
     currency:g('f_currency').value,fxRate:num(g('f_fxRate').value),cost:num(g('f_cost').value),
@@ -736,44 +772,107 @@ function saveRFQ(id){
   else{data.id=uid();data.created=todayStr();DB.rfqs.push(data);}
   closeModal();save();
 }
+/* RFQ 编号自增（取现有最大流水号 +1） */
+function nextRFQCode(){
+  let max=0;DB.rfqs.forEach(r=>{const m=/(\d+)$/.exec(r.code||'');if(m)max=Math.max(max,Number(m[1]));});
+  return 'RFQ-26-'+String(max+1).padStart(3,'0');
+}
+/* ---------- 批量创建：同项目多零件一次录入 ---------- */
+function openBatchForm(){
+  if(!DB.clients.length){alert('请先新建客户');return;}
+  const clientOpts=DB.clients.map(c=>'<option value="'+c.id+'">'+esc(c.code+' · '+c.name)+'</option>').join('');
+  openModal('<h3>批量创建询价（同项目多零件一次录入）<button class="x" onclick="closeModal()">✕</button></h3>'+
+  '<div class="fgrid">'+
+  '<div><label class="f">关联客户</label><select id="b_client">'+clientOpts+'</select></div>'+
+  '<div><label class="f">项目名称（所有零件共用）</label><input type="text" id="b_project"></div>'+
+  '<div><label class="f">业务板块</label><select id="b_segment" onchange="document.getElementById(\'b_subcat\').innerHTML=SUBCATS[this.value].map(function(s){return \'<option>\'+s+\'</option>\';}).join(\'\')">'+SEGMENTS.map(s=>'<option>'+s+'</option>').join('')+'</select></div>'+
+  '<div><label class="f">产品细分</label><select id="b_subcat">'+SUBCATS['保持架'].map(s=>'<option>'+s+'</option>').join('')+'</select></div>'+
+  '<div><label class="f">SOP 年份</label><input type="number" id="b_sopYear" value="2027"></div>'+
+  '<div><label class="f">生命周期（年）</label><input type="number" id="b_lifecycle" value="5" min="1" max="20"></div>'+
+  '<div><label class="f">币种</label><select id="b_currency"><option>EUR</option><option>USD</option><option>CNY</option></select></div>'+
+  '<div><label class="f">报价汇率</label><input type="number" step="0.0001" id="b_fxRate" value="7.85"></div>'+
+  '<div><label class="f">LTA 年降 %</label><input type="number" step="0.1" id="b_lta" value="0"></div>'+
+  '<div><label class="f">年降年数</label><input type="number" id="b_ltaYears" value="3" min="0" max="20"></div>'+
+  '</div>'+
+  '<label class="f">统一年需求量（可选：填入后每个零件各年相同；留空则创建后逐条编辑）</label><input type="number" id="b_qty">'+
+  '<label class="f">零件号清单（每行一个 P/N，一行 = 一条 RFQ）</label>'+
+  '<textarea id="b_parts" rows="6" placeholder="1358.301.024&#10;1358.301.025&#10;1358.301.026"></textarea>'+
+  '<div class="muted" style="margin-top:6px;">各零件的成本/裸价/模具费通常不同，批量创建后请在各 RFQ 点「编辑」补录报价信息。</div>'+
+  '<div style="display:flex;gap:10px;margin-top:14px;"><button class="btn btn-p" style="flex:1" onclick="saveBatch()">批量创建</button><button class="btn btn-g" onclick="closeModal()">取消</button></div>');
+}
+function saveBatch(){
+  const g=id=>document.getElementById(id);
+  const parts=g('b_parts').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(!parts.length){alert('请至少填写一个零件号（每行一个）');return;}
+  if(!g('b_project').value.trim()){alert('请填写项目名称');return;}
+  const sop=num(g('b_sopYear').value)||new Date().getFullYear();
+  let lc=num(g('b_lifecycle').value)||5;if(lc>20)lc=20;if(lc<1)lc=1;
+  const q=g('b_qty').value,ds={};
+  if(q!==''){for(let i=0;i<lc;i++)ds[String(sop+i)]=num(q);}
+  let maxN=0;DB.rfqs.forEach(r=>{const m=/(\d+)$/.exec(r.code||'');if(m)maxN=Math.max(maxN,Number(m[1]));});
+  parts.forEach(pn=>{
+    maxN++;
+    DB.rfqs.push({id:uid(),code:'RFQ-26-'+String(maxN).padStart(3,'0'),clientId:g('b_client').value,
+      project:g('b_project').value.trim(),partNo:pn,plantIdx:-1,plant:null,status:'收到询价',
+      segment:g('b_segment').value,subcat:g('b_subcat').value,sopYear:sop,lifecycle:lc,demands:Object.assign({},ds),
+      currency:g('b_currency').value,fxRate:num(g('b_fxRate').value),cost:0,barePrice:0,moldFee:0,moldQty:0,
+      lta:num(g('b_lta').value),ltaYears:num(g('b_ltaYears').value),rebate:0,revs:[],created:todayStr()});
+  });
+  closeModal();save();
+  alert('已批量创建 '+parts.length+' 条 RFQ（状态：收到询价），请逐条编辑补录成本与价格。');
+}
 
 /* ============================================================
    项目与提成
 ============================================================ */
 function renderProjList(){
-  document.getElementById('projList').innerHTML=DB.projects.length?DB.projects.map(p=>{
-    const r=rfqOfProject(p);const cc=commCalc(r);
+  const q=projQuery.trim().toLowerCase();
+  const match=p=>{
+    if(!q)return true;
+    const hay=rfqsOfProject(p).map(r=>(r.code||'')+' '+(r.project||'')+' '+(r.partNo||'')).join(' ')+' '+(p.custPN||'')+' '+(p.internalPN||'')+' '+(p.sapCode||'');
+    return hay.toLowerCase().includes(q);
+  };
+  const list=DB.projects.filter(match);
+  document.getElementById('projList').innerHTML=list.length?list.map(p=>{
+    const rs=rfqsOfProject(p);const r=rs[0];const cc=commCalc(r);
     if(!r||!cc)return '';
-    const grand=cc.total+num(p.oneTimeBonus);
-    return '<div class="item"><div class="head"><b>'+esc(r.code)+' · '+esc(r.project)+'</b>'+
+    const multi=rs.length>1;
+    const total=projCommSum(p),grand=total+num(p.oneTimeBonus);
+    const eavSum=rs.reduce((s,x)=>s+eavOf(x),0),salesSum=rs.reduce((s,x)=>s+annualSalesOf(x),0);
+    return '<div class="item"><div class="head"><b>'+esc(multi?r.project:r.code+' · '+r.project)+'</b>'+
       '<span class="tag '+(p.status==='进行中'?'green':'blue')+'">'+esc(p.status)+'</span>'+
+      (multi?'<span class="tag purple">'+rs.length+' 个零件合并</span>':'')+
       '<span class="tag" style="background:'+SEG_COLOR[r.segment]+'22;color:'+SEG_COLOR[r.segment]+'">'+esc(r.segment)+'-'+esc(r.subcat)+'</span></div>'+
-      '<div class="meta"><span>客户P/N '+esc(p.custPN||'-')+'</span><span>内部工程号 '+esc(p.internalPN||'-')+'</span><span>SAP '+esc(p.sapCode||'-')+'</span></div>'+
+      '<div class="meta">'+rs.map(x=>'<span>'+esc(x.code)+(x.partNo?' · P/N '+esc(x.partNo):'')+'</span>').join('')+'</div>'+
+      '<div class="meta" style="margin-top:4px;"><span>客户P/N '+esc(p.custPN||'-')+'</span><span>内部工程号 '+esc(p.internalPN||'-')+'</span><span>SAP '+esc(p.sapCode||'-')+'</span></div>'+
       '<div class="meta" style="margin-top:4px;"><span>OTS '+esc(p.otsDate||'-')+'</span><span>PPAP '+esc(p.ppapDate||'-')+'</span><span>SOP '+esc(p.sopDate||'-')+'（提成起算）</span></div>'+
       '<div class="nums">'+
-      '<div><span>核算毛利率</span><b style="color:'+(cc.margin<0.3?'var(--red)':'var(--green)')+'">'+(cc.margin*100).toFixed(1)+'%</b></div>'+
+      '<div><span>EAV 年均'+(multi?'合计':'')+'</span><b>'+fmt(eavSum,0)+' 件</b></div>'+
+      '<div><span>年均销售额'+(multi?'合计':'')+'</span><b style="color:var(--blue-d)">'+fmtRMB(salesSum)+'</b></div>'+
+      '<div><span>核算毛利率'+(multi?'（'+esc(r.code)+'）':'')+'</span><b style="color:'+(cc.margin<0.3?'var(--red)':'var(--green)')+'">'+(cc.margin*100).toFixed(1)+'%</b></div>'+
       '<div><span>最终提成比例</span><b>'+(cc.rate*100).toFixed(2)+'%<span style="font-size:11px;color:var(--sub)">（'+(cc.base*100).toFixed(1)+'%×'+cc.mCoef+'×'+cc.cCoef+'）</span></b></div>'+
       '<div><span>提成期限 / 截止</span><b>'+cc.years+' 年<span style="font-size:11px;color:var(--sub)">（'+(p.sopDate?addYears(p.sopDate,cc.years):'-')+'）</span></b></div>'+
-      '<div><span>量产提成总额</span><b style="color:var(--orange)">'+fmtRMB(cc.total)+'</b></div>'+
+      '<div><span>量产提成总额'+(multi?'（合计）':'')+'</span><b style="color:var(--orange)">'+fmtRMB(total)+'</b></div>'+
       '<div><span>一次性定点提成</span><b>'+fmtRMB(num(p.oneTimeBonus))+'</b></div>'+
-      '<div><span>本单提成合计</span><b style="color:var(--red)">'+fmtRMB(grand)+'</b></div></div>'+
+      '<div><span>本项目提成合计</span><b style="color:var(--red)">'+fmtRMB(grand)+'</b></div></div>'+
       '<div class="ops"><button class="btn btn-g btn-sm" onclick="openProjectForm(\''+p.id+'\')">编辑</button>'+
       '<button class="btn btn-g btn-sm" onclick="toggleProjStatus(\''+p.id+'\')">'+(p.status==='进行中'?'标记结束':'重新激活')+'</button>'+
       '<button class="btn btn-r btn-sm" onclick="delProject(\''+p.id+'\')">删除</button></div></div>';
-  }).join(''):'<div class="card"><div class="empty">暂无项目。在 RFQ 状态推进到「赢单定点」后，点「+ 赢单转项目」。</div></div>';
+  }).join(''):'<div class="card"><div class="empty">'+(q?'没有匹配的项目，换个关键词试试。':'暂无项目。在 RFQ 状态推进到「赢单定点」后，点「+ 赢单转项目」。')+'</div></div>';
 }
 function toggleProjStatus(id){const p=DB.projects.find(x=>x.id===id);p.status=p.status==='进行中'?'已结束':'进行中';save();}
 function delProject(id){if(!confirm('确认删除该项目？'))return;DB.projects=DB.projects.filter(p=>p.id!==id);save();}
 function ackMile(id,d){const p=DB.projects.find(x=>x.id===id);p.doneMile=p.doneMile||[];p.doneMile.push(d);save();}
 function openProjectForm(id,rfqId){
   const p=id?DB.projects.find(x=>x.id===id):null;
-  const wonOpts=DB.rfqs.filter(r=>r.status==='赢单定点'&&(p?r.id===p.rfqId:true)).map(r=>
-    '<option value="'+r.id+'"'+((p&&p.rfqId===r.id)||rfqId===r.id?' selected':'')+'>'+esc(r.code+' · '+r.project)+'</option>').join('');
-  if(!wonOpts){alert('还没有「赢单定点」状态的 RFQ，请先在询价管理中推进状态。');return;}
+  const wonOpts=DB.rfqs.filter(r=>r.status==='赢单定点'&&(p?rfqIdsOf(p).includes(r.id):!DB.projects.some(x=>rfqIdsOf(x).includes(r.id)))).map(r=>
+    '<option value="'+r.id+'"'+((p&&rfqIdsOf(p).includes(r.id))||rfqId===r.id?' selected':'')+'>'+esc(r.code+(r.partNo?' · P/N '+r.partNo:'')+' · '+r.project)+'</option>').join('');
+  if(!wonOpts){alert('还没有可转入的「赢单定点」RFQ（已转入项目的不会重复出现）。');return;}
   const v=(k,d)=>p?(p[k]!=null?p[k]:''):(d||'');
   openModal('<h3>'+(p?'编辑项目':'赢单转项目')+'<button class="x" onclick="closeModal()">✕</button></h3>'+
   '<label class="f">关联赢单 RFQ（自动映射板块/客户类型/EAV/成本/单价/币种/汇率）</label>'+
   '<select id="p_rfq" onchange="previewProjCalc()">'+wonOpts+'</select>'+
+  '<div class="muted" style="margin-top:4px;">多零件整合：若同客户、同项目名称已有「进行中」项目，保存时将自动合并为同一个项目。</div>'+
   '<div class="fgrid">'+
   '<div><label class="f">客户零件号 Customer P/N</label><input type="text" id="p_custPN" value="'+esc(v('custPN'))+'"></div>'+
   '<div><label class="f">内部工程号 Internal P/N</label><input type="text" id="p_internalPN" value="'+esc(v('internalPN'))+'"></div>'+
@@ -797,12 +896,22 @@ function previewProjCalc(){
 }
 function saveProject(id){
   const g=i=>document.getElementById(i);
-  const data={rfqId:g('p_rfq').value,custPN:g('p_custPN').value.trim(),internalPN:g('p_internalPN').value.trim(),
+  const rfqId=g('p_rfq').value;
+  const data={custPN:g('p_custPN').value.trim(),internalPN:g('p_internalPN').value.trim(),
     sapCode:g('p_sapCode').value.trim(),oneTimeBonus:num(g('p_oneTime').value),
     otsDate:g('p_ots').value,ppapDate:g('p_ppap').value,sopDate:g('p_sop').value};
-  if(id){Object.assign(DB.projects.find(x=>x.id===id),data);}
-  else{data.id=uid();data.status='进行中';data.doneMile=[];DB.projects.push(data);}
-  closeModal();save();
+  if(id){Object.assign(DB.projects.find(x=>x.id===id),data);closeModal();save();return;}
+  const rfq=DB.rfqs.find(x=>x.id===rfqId);if(!rfq)return;
+  /* 多零件自动整合：同客户 + 同项目名称 + 进行中 → 并入现有项目 */
+  const exist=DB.projects.find(p=>p.status==='进行中'&&rfqsOfProject(p).some(x=>x.project===rfq.project&&x.clientId===rfq.clientId));
+  if(exist){
+    exist.rfqIds=rfqIdsOf(exist).concat([rfq.id]);
+    closeModal();save();
+    alert('已自动合并到现有项目「'+rfq.project+'」，当前共 '+exist.rfqIds.length+' 个零件。');
+    return;
+  }
+  data.id=uid();data.status='进行中';data.doneMile=[];data.rfqIds=[rfq.id];
+  DB.projects.push(data);closeModal();save();
 }
 
 /* ============================================================
@@ -870,6 +979,41 @@ function exportJSON(){
   const blob=new Blob([JSON.stringify({clients:DB.clients,rfqs:DB.rfqs,projects:DB.projects,todos:DB.todos},null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
   a.download='外贸工作台备份_'+todayStr()+'.json';a.click();URL.revokeObjectURL(a.href);
+}
+/* ---------- 导出 Excel（CSV，UTF-8 BOM，Excel 可直接打开） ---------- */
+function csvCell(v){v=String(v==null?'':v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+function downloadCSV(filename,headers,rows){
+  const csv='\uFEFF'+[headers].concat(rows).map(r=>r.map(csvCell).join(',')).join('\r\n');  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;a.click();URL.revokeObjectURL(a.href);
+}
+function exportRFQCSV(){
+  if(!DB.rfqs.length){alert('暂无 RFQ 数据');return;}
+  const rows=DB.rfqs.map(r=>{
+    const c=clientOf(r),cc=commCalc(r);
+    return [r.code,c?c.code:'',c?c.name:'',c?c.type:'',r.project,r.partNo||'',r.segment,r.subcat,r.status,
+      r.sopYear,r.lifecycle,Object.keys(r.demands||{}).sort().map(y=>y+':'+r.demands[y]).join('; '),Math.round(cc.eav),
+      r.currency,r.fxRate,r.cost,r.barePrice,r.moldFee,r.moldQty,fmt(amortOf(r)),fmt(cc.fp),
+      (cc.margin*100).toFixed(1)+'%',r.lta+'%',r.ltaYears||0,Math.round(annualSalesOf(r)),
+      r.plant?r.plant.contact||'':'',r.plant?r.plant.email||'':'',
+      (r.revs||[]).map(v=>v.ver+' '+v.date+' '+v.price).join('; ')];
+  });
+  downloadCSV('RFQ询价导出_'+todayStr()+'.csv',
+    ['RFQ ID','客户代码','客户名称','客户类型','项目名称','零件号','业务板块','产品细分','状态','SOP年份','生命周期(年)','阶梯需求(年:量)','EAV年均','币种','报价汇率','单件成本','单件裸价','模具总费','模具分摊数量','单件分摊额','最终对外单价','核算毛利率','LTA年降','年降年数','年均销售额(RMB)','采购联系人','联系人邮箱','Rev报价历史'],rows);
+}
+function exportProjCSV(){
+  if(!DB.projects.length){alert('暂无项目数据');return;}
+  const rows=DB.projects.map(p=>{
+    const rs=rfqsOfProject(p),r0=rs[0],cc0=commCalc(r0);
+    const total=projCommSum(p);
+    const eavSum=rs.reduce((s,x)=>s+eavOf(x),0),salesSum=rs.reduce((s,x)=>s+annualSalesOf(x),0);
+    return [rs.map(x=>x.code).join('; '),r0?r0.project:'',rs.map(x=>x.partNo||'').filter(Boolean).join('; '),
+      p.custPN||'',p.internalPN||'',p.sapCode||'',p.otsDate||'',p.ppapDate||'',p.sopDate||'',
+      Math.round(eavSum),Math.round(salesSum),
+      cc0?(cc0.margin*100).toFixed(1)+'%':'',cc0?(cc0.rate*100).toFixed(2)+'%':'',cc0?cc0.years:'',
+      p.sopDate&&cc0?addYears(p.sopDate,cc0.years):'',Math.round(total),num(p.oneTimeBonus),Math.round(total+num(p.oneTimeBonus)),p.status];
+  });
+  downloadCSV('项目提成导出_'+todayStr()+'.csv',
+    ['RFQ ID(多个)','项目名称','零件号(多个)','客户P/N','内部工程号','SAP物料号','OTS交样','PPAP提交','SOP量产日','EAV年均合计','年均销售额合计(RMB)','核算毛利率','最终提成比例','提成期限(年)','提成截止日期','量产提成总额(RMB)','一次性定点提成(RMB)','提成合计(RMB)','状态'],rows);
 }
 function importJSON(ev){
   const f=ev.target.files[0];if(!f)return;
