@@ -350,6 +350,20 @@ function migrate(){
       delete r.eavDirect;
     }
     if(r.ltaYears===undefined)r.ltaYears=num(r.lta)>0?3:0;
+    /* v9：单一 LTA% → 逐年动态降幅数组 */
+    if(r.ltaRates===undefined){
+      const n=num(r.ltaYears)||0;r.ltaRates=[];
+      for(let i=0;i<n;i++)r.ltaRates.push(num(r.lta));
+      delete r.lta;
+    }
+    if(r.incoterms===undefined)r.incoterms='EXW';
+    if(r.moldCommRate===undefined)r.moldCommRate=0;
+    /* v9：成本/裸价/模具费统一为 RMB 本位（旧数据为外币口径，按报价汇率折算） */
+    if(!r.rmbBase){
+      const fx=num(r.fxRate)||1;
+      r.cost=num(r.cost)*fx;r.barePrice=num(r.barePrice)*fx;r.moldFee=num(r.moldFee)*fx;
+      r.rmbBase=true;
+    }
   });
   /* 项目模型升级：单 rfqId → rfqIds 数组（支持同项目多零件合并） */
   DB.projects.forEach(p=>{
@@ -378,21 +392,25 @@ function seed(){
   const r3={id:uid(),code:'RFQ-26-003',clientId:c1.id,project:'ZF 8HP 变速箱保持架',partNo:'1358.301.024',
     plantIdx:0,plant:{name:'ZF 腓特烈港工厂',contact:'Hans Müller',email:'hans.mueller@zf.com'},segment:'保持架',subcat:'小TRB',
     sopYear:2026,lifecycle:5,demands:{'2026':300000,'2027':500000,'2028':600000,'2029':600000,'2030':500000},
-    currency:'EUR',fxRate:7.85,cost:6.1,barePrice:8.6,moldFee:400000,moldQty:2500000,lta:2,ltaYears:3,rebate:1.5,
+    currency:'EUR',fxRate:7.85,cost:47.89,barePrice:67.51,moldFee:3140000,moldQty:2500000,ltaRates:[2,2,2],rebate:1.5,
+    incoterms:'FOB',moldCommRate:5,rmbBase:true,
     status:'赢单定点',sample:true,revs:[{ver:'Rev1',date:'2026-02-10',price:9.2,note:'首轮报价'},{ver:'Rev2',date:'2026-03-05',price:8.6,note:'VA/VE 后定点价'}]};
   DB.rfqs=[
     {id:uid(),code:'RFQ-26-001',clientId:c1.id,project:'ZF 电驱桥大TRB保持架',partNo:'0735.320.611',segment:'保持架',subcat:'大TRB',
       sopYear:2027,lifecycle:6,demands:{'2027':200000,'2028':350000,'2029':400000,'2030':400000,'2031':400000,'2032':350000},
-      currency:'EUR',fxRate:7.85,cost:8.2,barePrice:11.5,moldFee:600000,moldQty:1000000,lta:3,ltaYears:3,rebate:2,
+      currency:'EUR',fxRate:7.85,cost:64.37,barePrice:90.28,moldFee:4710000,moldQty:1000000,ltaRates:[3,3,3],rebate:2,
+      incoterms:'FOB',moldCommRate:5,rmbBase:true,
       status:'技术评审中',sample:true,revs:[{ver:'R1',date:'2026-06-18',price:11.5,note:'Round 1 提交'}]},
     {id:uid(),code:'RFQ-26-002',clientId:c2.id,project:'Schaeffler 精冲法兰盘',partNo:'F-2345.77',segment:'汽车零部件',subcat:'精冲件',
       sopYear:2027,lifecycle:5,demands:{'2027':150000,'2028':280000,'2029':300000,'2030':300000,'2031':250000},
-      currency:'EUR',fxRate:7.82,cost:4.4,barePrice:5.9,moldFee:220000,moldQty:800000,lta:2,ltaYears:3,rebate:0,
+      currency:'EUR',fxRate:7.82,cost:34.41,barePrice:46.14,moldFee:1720400,moldQty:800000,ltaRates:[2,2,2],rebate:0,
+      incoterms:'EXW',moldCommRate:5,rmbBase:true,
       status:'Round 2+ 提交',sample:true,revs:[]},
     r3,
     {id:uid(),code:'RFQ-26-004',clientId:c3.id,project:'GKN 防尘盖（EGC）',partNo:'GC-8801',segment:'EGC',subcat:'防尘盖',
       sopYear:2027,lifecycle:4,demands:{'2027':80000,'2028':120000,'2029':120000,'2030':100000},
-      currency:'USD',fxRate:7.15,cost:1.1,barePrice:1.55,moldFee:60000,moldQty:400000,lta:0,ltaYears:0,rebate:0,
+      currency:'USD',fxRate:7.15,cost:7.87,barePrice:11.08,moldFee:429000,moldQty:400000,ltaRates:[],rebate:0,
+      incoterms:'EXW',moldCommRate:0,rmbBase:true,
       status:'收到询价',sample:true,created:addDays(todayStr(),-4),revs:[]}
   ];
   DB.projects=[{id:uid(),rfqIds:[r3.id],custPN:'ZF-1358-301-024',internalPN:'EG-C-26031',sapCode:'SAP-80001122',
@@ -414,18 +432,22 @@ function eavOf(r){
   const vals=Object.values(r.demands||{}).map(Number).filter(v=>!isNaN(v));
   return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0;
 }
-/* 年均销售额（RMB）= EAV × 最终对外单价 × 报价汇率 */
-function annualSalesOf(r){return eavOf(r)*finalPriceOf(r)*num(r.fxRate);}
-/* LTA 年降价格阶梯：SOP 年 = 最终对外单价；SOP+n = 上一年 × (1 - LTA%)，生成 n = 1..年降年数 */
+/* 年均销售额 EAR（RMB）= 单件裸价(RMB) × EAV（不含模具分摊） */
+function annualSalesOf(r){return eavOf(r)*num(r.barePrice);}
+/* 动态阶梯年降：SOP 年 = 对外报价(外币)；SOP+n = 上一年 × (1 - 当年 LTA%)，每年降幅独立 */
 function priceLadder(r){
-  const years=num(r.ltaYears)||0,p0=finalPriceOf(r),sop=num(r.sopYear)||new Date().getFullYear();
-  const f=1-num(r.lta)/100,out=[{year:sop,price:p0}];
-  for(let i=1;i<=years;i++)out.push({year:sop+i,price:out[i-1].price*f});
+  const rates=r.ltaRates||[],sop=num(r.sopYear)||new Date().getFullYear();
+  const out=[{year:sop,price:extPriceOf(r)}];
+  rates.forEach((rt,i)=>out.push({year:sop+i+1,price:out[i].price*(1-num(rt)/100)}));
   return out;
 }
 function amortOf(r){return num(r.moldQty)>0?num(r.moldFee)/num(r.moldQty):0;}
+/* 最终单价(RMB) = 单件裸价 + 模具分摊额（提成基数用） */
 function finalPriceOf(r){return num(r.barePrice)+amortOf(r);}
-function marginOf(r){const fp=finalPriceOf(r);return fp>0?(fp-num(r.cost)*0.87)/fp:0;}
+/* 对外报价(外币) = 最终单价(RMB) / 报价汇率 */
+function extPriceOf(r){const fx=num(r.fxRate);return fx>0?finalPriceOf(r)/fx:0;}
+/* 制造成本(RMB) = 单件成本 × 0.87（扣 13% 进项）；核算毛利率绝不包含模具分摊 */
+function marginOf(r){const b=num(r.barePrice);return b>0?(b-num(r.cost)*0.87)/b:0;}
 function clientOf(r){return DB.clients.find(c=>c.id===r.clientId)||null;}
 function commCalc(r){
   if(!r)return null;
@@ -438,19 +460,21 @@ function commCalc(r){
   const rate=base*mCoef*cCoef;
   const years=seg==='保持架'?1:3;
   const eav=eavOf(r),fp=finalPriceOf(r);
-  const total=fp*num(r.fxRate)*eav*rate*years;
+  const total=fp*eav*rate*years;
   return {margin,base,mCoef,cCoef,rate,years,eav,fp,total,ctype,client};
 }
 function rfqIdsOf(p){return p.rfqIds||(p.rfqId?[p.rfqId]:[]);}
 function rfqOfProject(p){const ids=rfqIdsOf(p);return DB.rfqs.find(r=>r.id===ids[0])||null;}
 function rfqsOfProject(p){return rfqIdsOf(p).map(id=>DB.rfqs.find(r=>r.id===id)).filter(Boolean);}
 function projCommSum(p){return rfqsOfProject(p).reduce((s,r)=>{const c=commCalc(r);return s+(c?c.total:0);},0);}
-/* 模具费提成状态：RFQ 有模具分摊 → 「分摊」（随单价摊销）；无分摊则按 PPAP 状态：回签=已提，未提交/提交=待提 */
+/* 模具费提成：有分摊 → 「分摊」（无独立提成）；无分摊则按 PPAP 状态：回签=已提，未提交/提交=待提；
+   提成额(RMB) = 模具总费(RMB) × 模具费提成比例 */
 function moldCommOf(r,ppapStatus){
   if(!num(r.moldFee))return null;
-  if(num(r.moldQty)>0)return {mode:'分摊',fee:num(r.moldFee)*num(r.fxRate)};
-  return {mode:ppapStatus==='PSW回签'?'已提':'待提',fee:num(r.moldFee)*num(r.fxRate)};
+  if(num(r.moldQty)>0)return {mode:'分摊',fee:num(r.moldFee),amt:0};
+  return {mode:ppapStatus==='PSW回签'?'已提':'待提',fee:num(r.moldFee),amt:num(r.moldFee)*num(r.moldCommRate)/100};
 }
+function moldCommSum(p){return rfqsOfProject(p).reduce((s,r)=>{const m=moldCommOf(r,p.ppapStatus);return s+(m?m.amt:0);},0);}
 
 /* ============================================================
    渲染框架
@@ -534,7 +558,7 @@ function renderAttack(){
     return '<div class="item"><div class="head"><b>'+esc(r.code)+'</b><span class="tag orange">'+esc(r.status)+'</span>'+
       '<span class="tag" style="background:'+SEG_COLOR[r.segment]+'22;color:'+SEG_COLOR[r.segment]+'">'+esc(r.segment)+' · '+esc(r.subcat)+'</span></div>'+
       '<div class="meta"><span>'+esc(c?c.code:'-')+' / '+esc(r.project)+'</span><span>EAV '+fmt(cc.eav,0)+' 件</span>'+
-      '<span>最终单价 '+fmt(cc.fp)+' '+esc(r.currency)+'</span><span>毛利率 '+(cc.margin*100).toFixed(1)+'%</span></div>'+
+      '<span>对外报价 '+fmt(extPriceOf(r))+' '+esc(r.currency)+'</span><span>毛利率 '+(cc.margin*100).toFixed(1)+'%</span></div>'+
       '<div class="ops"><button class="btn btn-g btn-sm" onclick="openRFQForm(\''+r.id+'\')">跟进 / Rev 报价</button>'+
       '<button class="btn btn-p btn-sm" onclick="advanceRFQ(\''+r.id+'\')">推进状态 →</button></div></div>';
   }).join(''):'<div class="empty">当前没有处于攻坚阶段的 RFQ。</div>';
@@ -578,7 +602,7 @@ function renderGantt(){
 function renderDonut(){
   const won=DB.rfqs.filter(r=>r.status==='赢单定点');
   const agg={};let total=0;
-  won.forEach(r=>{const v=eavOf(r)*finalPriceOf(r)*num(r.fxRate);agg[r.segment]=(agg[r.segment]||0)+v;total+=v;});
+  won.forEach(r=>{const v=annualSalesOf(r);agg[r.segment]=(agg[r.segment]||0)+v;total+=v;});
   if(!total){document.getElementById('donutWrap').innerHTML='<div class="empty">暂无赢单数据。</div>';
     document.getElementById('donutLegend').innerHTML='';document.getElementById('subcatBars').innerHTML='';return;}
   const cx=110,cy=110,R=86,r=52;let a0=-Math.PI/2;let s='<svg viewBox="0 0 340 220" style="max-width:420px;width:100%">';
@@ -603,7 +627,7 @@ function renderDonut(){
      '<text x="'+cx+'" y="'+(cy+16)+'" font-size="14" font-weight="700" fill="#1f2937" text-anchor="middle">'+fmtRMB(total)+'</text></svg>';
   document.getElementById('donutWrap').innerHTML=s;
   document.getElementById('donutLegend').innerHTML=legs.join('');
-  const sub={};won.forEach(r=>{const v=eavOf(r)*finalPriceOf(r)*num(r.fxRate);const k=r.segment+'-'+r.subcat;sub[k]=(sub[k]||0)+v;});
+  const sub={};won.forEach(r=>{const v=annualSalesOf(r);const k=r.segment+'-'+r.subcat;sub[k]=(sub[k]||0)+v;});
   const max=Math.max.apply(null,Object.values(sub));
   document.getElementById('subcatBars').innerHTML='<div class="muted" style="margin-bottom:8px;">按产品细分（年化 ¥）</div>'+
     Object.keys(sub).sort((a,b)=>sub[b]-sub[a]).map(k=>{
@@ -662,11 +686,11 @@ function renderRFQList(){
       (r.revs&&r.revs.length?'<span>'+r.revs.length+' 次 Rev 报价</span>':'')+'</div>'+
       '<div class="nums">'+
       '<div><span>EAV 年均需求</span><b>'+fmt(cc.eav,0)+' 件</b></div>'+
-      '<div><span>最终对外单价</span><b>'+fmt(cc.fp)+' '+esc(r.currency)+'</b></div>'+
-      '<div><span>年均销售额</span><b style="color:var(--blue-d)">'+fmtRMB(annualSalesOf(r))+'</b></div>'+
+      '<div><span>对外报价(外币)</span><b>'+fmt(extPriceOf(r))+' '+esc(r.currency)+'</b></div>'+
+      '<div><span>年均销售额 EAR</span><b style="color:var(--blue-d)">'+fmtRMB(annualSalesOf(r))+'</b></div>'+
       '<div><span>核算毛利率</span><b style="color:'+(cc.margin<0.3?'var(--red)':'var(--green)')+'">'+(cc.margin*100).toFixed(1)+'%</b></div>'+
       '<div><span>若赢单·提成比例</span><b>'+(cc.rate*100).toFixed(2)+'%</b></div></div>'+
-      (num(r.ltaYears)>0?'<div class="meta" style="margin-top:6px;"><span style="color:var(--orange)">年降 '+esc(r.lta)+'% × '+esc(r.ltaYears)+'年：</span><span>'+priceLadder(r).map(p=>p.year+' '+fmt(p.price)).join(' → ')+' '+esc(r.currency)+'</span></div>':'')+
+      ((r.ltaRates||[]).length?'<div class="meta" style="margin-top:6px;"><span style="color:var(--orange)">年降 '+r.ltaRates.map(x=>esc(x)+'%').join('/')+'：</span><span>'+priceLadder(r).map(p=>p.year+' '+fmt(p.price)).join(' → ')+' '+esc(r.currency)+'</span></div>':'')+
       '<div class="ops"><button class="btn btn-g btn-sm" onclick="openRFQForm(\''+r.id+'\')">编辑 / Rev 历史</button>'+
       '<button class="btn btn-g btn-sm" onclick="advanceRFQ(\''+r.id+'\')">推进状态 →</button>'+
       (r.status==='赢单定点'&&!linked?'<button class="btn btn-p btn-sm" onclick="openProjectForm(null,\''+r.id+'\')">转入项目库</button>':'')+
@@ -707,24 +731,28 @@ function openRFQForm(id){
   '<div><label class="f">SOP 年份</label><input type="number" id="f_sopYear" value="'+esc(v('sopYear',2027))+'" onchange="syncPricingArea()"></div>'+
   '<div><label class="f">币种</label><select id="f_currency">'+['EUR','USD','CNY'].map(c=>'<option'+(v('currency','EUR')===c?' selected':'')+'>'+c+'</option>').join('')+'</select></div>'+
   '<div><label class="f">报价汇率（固定报价当天）</label><input type="number" step="0.0001" id="f_fxRate" value="'+esc(v('fxRate',7.85))+'" oninput="previewCalc()"></div>'+
-  '<div><label class="f">单件成本</label><input type="number" step="0.01" id="f_cost" value="'+esc(v('cost'))+'" oninput="previewCalc()"></div>'+
-  '<div><label class="f">单件裸价</label><input type="number" step="0.01" id="f_barePrice" value="'+esc(v('barePrice'))+'" oninput="previewCalc()"></div>'+
-  '<div><label class="f">模具总费</label><input type="number" id="f_moldFee" value="'+esc(v('moldFee'))+'" oninput="previewCalc()"></div>'+
+  '<div><label class="f">单件成本（RMB ¥）</label><input type="number" step="0.01" id="f_cost" value="'+esc(v('cost'))+'" oninput="previewCalc()"></div>'+
+  '<div><label class="f">单件裸价（RMB ¥）</label><input type="number" step="0.01" id="f_barePrice" value="'+esc(v('barePrice'))+'" oninput="previewCalc()"></div>'+
+  '<div><label class="f">模具总费（RMB ¥）</label><input type="number" id="f_moldFee" value="'+esc(v('moldFee'))+'" oninput="previewCalc()"></div>'+
   '<div><label class="f">模具分摊数量</label><input type="number" id="f_moldQty" value="'+esc(v('moldQty'))+'" oninput="previewCalc()"></div>'+
-  '<div><label class="f">LTA 年降比例 %</label><input type="number" step="0.1" id="f_lta" value="'+esc(v('lta'))+'" oninput="previewCalc()"></div>'+
-  '<div><label class="f">年降年数（价格生成至 SOP+N）</label><input type="number" min="0" max="20" id="f_ltaYears" value="'+esc(v('ltaYears',3))+'" oninput="previewCalc()"></div>'+
+  '<div><label class="f">贸易术语 Incoterms</label><select id="f_incoterms">'+['EXW','FOB','FCA','DAP','DDP'].map(s=>'<option'+(v('incoterms','EXW')===s?' selected':'')+'>'+s+'</option>').join('')+'</select></div>'+
+  '<div><label class="f">模具费提成比例 %（模具提成=模具总费×比例）</label><input type="number" step="0.1" id="f_moldCommRate" value="'+esc(v('moldCommRate'))+'" oninput="previewCalc()"></div>'+
+  '<div><label class="f">要求年降年数 LTA Years</label><input type="number" min="0" max="10" id="f_ltaYears" value="'+esc(r?(r.ltaRates||[]).length:3)+'" onchange="syncLtaArea()"></div>'+
   '<div><label class="f">Rebate 返利比例 %</label><input type="number" step="0.1" id="f_rebate" value="'+esc(v('rebate'))+'"></div>'+
   '</div>'+
   '<div id="pricingArea"></div>'+
+  '<div id="ltaArea"></div>'+
   '<div class="calcbar" id="calcBar"></div>'+
-  '<label class="f">Rev 报价历史（同一 RFQ 历次版本）</label>'+
-  '<div id="revRows">'+revs.map((rv,i)=>revRowHTML(rv)).join('')+'</div>'+
-  '<button class="btn btn-g btn-sm" onclick="addRevRow()">+ 添加 Rev 记录</button>'+
+  '<label class="f">报价历史 Rev（只读归档）</label>'+
+  '<div id="revList">'+revs.map(revItemHTML).join('')+'</div>'+
+  '<button class="btn btn-p btn-sm" onclick="archiveRev()">归档当前数据为新版本 Rev</button>'+
   '<div style="display:flex;gap:10px;margin-top:16px;"><button class="btn btn-p" style="flex:1" onclick="saveRFQ(\''+(r?r.id:'')+'\')">保存</button>'+
   '<button class="btn btn-g" onclick="closeModal()">取消</button></div>');
+  window._editRevs=((r&&r.revs)||[]).slice();
   syncSubcat(r?r.subcat:null);
   syncPlants(r&&r.plantIdx!=null?r.plantIdx:-1);
   syncPricingArea(r?{lifecycle:r.lifecycle,demands:r.demands||{}}:null);
+  syncLtaArea(r?(r.ltaRates||[]):[3,3,3]);
 }
 /* 客户联动：工厂下拉只列工厂名，联系人与邮箱自动带出到独立字段 */
 function syncPlants(selIdx){
@@ -763,15 +791,32 @@ function syncPricingArea(init){
     '<div class="muted" style="margin-top:6px;">按 SOP '+sop+' 年起 '+lc+' 年生命周期自动生成；留空年份不计入 EAV 平均（上限 20 年）。</div>';
   previewCalc();
 }
-function revRowHTML(rv){
-  rv=rv||{};
-  return '<div class="revrow"><input type="text" class="rv_ver" placeholder="版本" value="'+esc(rv.ver||'')+'">'+
-    '<input type="date" class="rv_date" value="'+esc(rv.date||'')+'">'+
-    '<input type="number" step="0.01" class="rv_price" placeholder="单价" value="'+esc(rv.price!=null?rv.price:'')+'">'+
-    '<input type="text" class="rv_note" placeholder="备注" value="'+esc(rv.note||'')+'">'+
-    '<button class="btn btn-r btn-sm" onclick="this.parentNode.remove();previewCalc()">✕</button></div>';
+/* Rev 归档条目（只读展示，兼容旧版 {ver,date,price,note} 格式） */
+function revItemHTML(rv){
+  if(rv.priceFx!=null||rv.bare!=null){
+    return '<div class="meta" style="padding:8px 10px;background:#f8fafc;border-radius:8px;margin-bottom:6px;"><b>'+esc(rv.ver)+'</b> · '+esc(rv.date)+
+      ' · 成本 ¥'+fmt(rv.cost)+' · 裸价 ¥'+fmt(rv.bare)+' · 对外 '+fmt(rv.priceFx)+' '+esc(rv.currency||'')+' · 模具 ¥'+fmt(rv.moldFee,0)+'</div>';
+  }
+  return '<div class="meta" style="padding:8px 10px;background:#f8fafc;border-radius:8px;margin-bottom:6px;"><b>'+esc(rv.ver||'Rev')+'</b> · '+esc(rv.date||'-')+' · 对外价 '+fmt(rv.price)+'（旧版外币口径）'+(rv.note?' · '+esc(rv.note):'')+'</div>';
 }
-function addRevRow(){document.getElementById('revRows').insertAdjacentHTML('beforeend',revRowHTML());}
+/* 一键归档：抓取当前表单数据生成不可编辑的 Rev 条目 */
+function archiveRev(){
+  const r=readRFQForm();
+  window._editRevs=window._editRevs||[];
+  window._editRevs.push({ver:'Rev.'+(window._editRevs.length+1),date:todayStr(),cost:r.cost,bare:r.barePrice,
+    priceFx:extPriceOf(r),currency:r.currency,moldFee:r.moldFee});
+  document.getElementById('revList').innerHTML=window._editRevs.map(revItemHTML).join('');
+}
+/* 动态阶梯年降：按年数 N 生成 N 个百分比输入框 */
+function currentLtaRates(){return Array.prototype.map.call(document.querySelectorAll('.f_ltar'),i=>i.value);}
+function syncLtaArea(init){
+  let n=num(document.getElementById('f_ltaYears').value)||0;if(n>10)n=10;if(n<0)n=0;
+  const prev=init||currentLtaRates();
+  let rows='';
+  for(let i=0;i<n;i++)rows+='<div><label class="f">Y'+(i+1)+' LTA 降幅 %</label><input type="number" step="0.1" class="f_ltar" value="'+esc(prev[i]!=null?prev[i]:'')+'" oninput="previewCalc()"></div>';
+  document.getElementById('ltaArea').innerHTML=n?'<div class="fgrid">'+rows+'</div>':'<div class="muted" style="margin-top:6px;">无年降要求</div>';
+  previewCalc();
+}
 function syncSubcat(selected){
   const seg=document.getElementById('f_segment').value;
   const sel=document.getElementById('f_subcat');
@@ -790,21 +835,23 @@ function readRFQForm(){
     sopYear:num(g('f_sopYear').value),lifecycle:le?num(le.value):'',demands:ds,
     currency:g('f_currency').value,fxRate:num(g('f_fxRate').value),cost:num(g('f_cost').value),
     barePrice:num(g('f_barePrice').value),moldFee:num(g('f_moldFee').value),moldQty:num(g('f_moldQty').value),
-    lta:num(g('f_lta').value),ltaYears:num(g('f_ltaYears')?g('f_ltaYears').value:0),rebate:num(g('f_rebate').value),
-    revs:Array.prototype.map.call(document.querySelectorAll('#revRows .revrow'),row=>({
-      ver:row.querySelector('.rv_ver').value.trim(),date:row.querySelector('.rv_date').value,
-      price:num(row.querySelector('.rv_price').value),note:row.querySelector('.rv_note').value.trim()
-    })).filter(rv=>rv.ver||rv.date||rv.price)};
+    incoterms:g('f_incoterms')?g('f_incoterms').value:'EXW',
+    moldCommRate:num(g('f_moldCommRate')?g('f_moldCommRate').value:0),
+    ltaRates:currentLtaRates().map(num),
+    lta:num(g('f_lta')?g('f_lta').value:0),rebate:num(g('f_rebate').value),
+    rmbBase:true,
+    revs:window._editRevs||[]};
 }
 function previewCalc(){
   try{
-    const r=readRFQForm();const cc=commCalc(r);
-    const lad=num(r.ltaYears)>0
-      ?'<br>年降价格阶梯：'+priceLadder(r).map((p,i)=>(i===0?'<b>':'')+p.year+'年 '+fmt(p.price)+(i===0?'</b>':'')).join(' → ')+' '+esc(r.currency)
+    const r=readRFQForm();const cc=commCalc(r);const fx=num(r.fxRate)||1;
+    const lad=(r.ltaRates||[]).length
+      ?'<br>对外报价年降轨迹：'+priceLadder(r).map((p,i)=>(i===0?'<b>':'')+p.year+'年 '+fmt(p.price)+(i===0?'</b>':'')).join(' → ')+' '+esc(r.currency)
       :'';
     document.getElementById('calcBar').innerHTML=
-      'EAV 年均需求：<b>'+fmt(cc.eav,0)+'</b> 件　|　单件分摊额：<b>'+fmt(amortOf(r))+'</b>　|　最终对外单价：<b>'+fmt(cc.fp)+' '+esc(r.currency)+'</b><br>'+
-      '年均销售额：<b>'+fmtRMB(annualSalesOf(r))+'</b>（EAV × 最终单价 × 汇率 '+r.fxRate+'）　|　核算毛利率：<b>'+(cc.margin*100).toFixed(1)+'%</b><br>'+
+      '对外裸价(外币)：<b>'+fmt(num(r.barePrice)/fx)+' '+esc(r.currency)+'</b>（裸价RMB÷汇率）　|　对外模具费(外币)：<b>'+fmt(num(r.moldFee)/fx)+' '+esc(r.currency)+'</b><br>'+
+      'EAV 年均需求：<b>'+fmt(cc.eav,0)+'</b> 件　|　单件分摊额：<b>¥'+fmt(amortOf(r))+'</b>　|　对外报价(外币)：<b>'+fmt(extPriceOf(r))+' '+esc(r.currency)+'</b>（裸价+分摊）<br>'+
+      '制造成本：<b>¥'+fmt(num(r.cost)*0.87)+'</b>（成本×0.87）　|　核算毛利率：<b>'+(cc.margin*100).toFixed(1)+'%</b>（不含模具分摊）　|　年均销售额 EAR：<b>'+fmtRMB(annualSalesOf(r))+'</b><br>'+
       '基准点数 '+(cc.base*100).toFixed(1)+'% × 毛利系数 '+cc.mCoef+' × 客户系数 '+cc.cCoef+' = 提成比例 <b>'+(cc.rate*100).toFixed(2)+'%</b>'+lad;
   }catch(e){}
 }
@@ -834,8 +881,8 @@ function openBatchForm(){
   '<div><label class="f">生命周期（年）</label><input type="number" id="b_lifecycle" value="5" min="1" max="20"></div>'+
   '<div><label class="f">币种</label><select id="b_currency"><option>EUR</option><option>USD</option><option>CNY</option></select></div>'+
   '<div><label class="f">报价汇率</label><input type="number" step="0.0001" id="b_fxRate" value="7.85"></div>'+
-  '<div><label class="f">LTA 年降 %</label><input type="number" step="0.1" id="b_lta" value="0"></div>'+
-  '<div><label class="f">年降年数</label><input type="number" id="b_ltaYears" value="3" min="0" max="20"></div>'+
+  '<div><label class="f">LTA 年降 %（每年相同）</label><input type="number" step="0.1" id="b_lta" value="0"></div>'+
+  '<div><label class="f">年降年数</label><input type="number" id="b_ltaYears" value="3" min="0" max="10"></div>'+
   '</div>'+
   '<label class="f">统一年需求量（可选：填入后每个零件各年相同；留空则创建后逐条编辑）</label><input type="number" id="b_qty">'+
   '<label class="f">零件号清单（每行一个 P/N，一行 = 一条 RFQ）</label>'+
@@ -859,7 +906,8 @@ function saveBatch(){
       project:g('b_project').value.trim(),partNo:pn,plantIdx:-1,plant:null,status:'收到询价',
       segment:g('b_segment').value,subcat:g('b_subcat').value,sopYear:sop,lifecycle:lc,demands:Object.assign({},ds),
       currency:g('b_currency').value,fxRate:num(g('b_fxRate').value),cost:0,barePrice:0,moldFee:0,moldQty:0,
-      lta:num(g('b_lta').value),ltaYears:num(g('b_ltaYears').value),rebate:0,revs:[],created:todayStr()});
+      ltaRates:(function(){const n=num(g('b_ltaYears').value)||0,rt=num(g('b_lta').value),a=[];for(let i=0;i<n;i++)a.push(rt);return a;})(),
+      rebate:0,revs:[],incoterms:'EXW',moldCommRate:0,rmbBase:true,created:todayStr()});
   });
   closeModal();save();
   alert('已批量创建 '+parts.length+' 条 RFQ（状态：收到询价），请逐条编辑补录成本与价格。');
@@ -880,7 +928,7 @@ function renderProjList(){
     const rs=rfqsOfProject(p);const r=rs[0];const cc=commCalc(r);
     if(!r||!cc)return '';
     const multi=rs.length>1;
-    const total=projCommSum(p),grand=total+num(p.oneTimeBonus);
+    const total=projCommSum(p),moldAmt=moldCommSum(p),grand=total+num(p.oneTimeBonus)+moldAmt;
     const eavSum=rs.reduce((s,x)=>s+eavOf(x),0),salesSum=rs.reduce((s,x)=>s+annualSalesOf(x),0);
     return '<div class="item"><div class="head"><b>'+esc(multi?r.project:r.code+' · '+r.project)+'</b>'+
       '<span class="tag '+(p.status==='进行中'?'green':'blue')+'">'+esc(p.status)+'</span>'+
@@ -891,7 +939,7 @@ function renderProjList(){
       '<div class="meta" style="margin-top:4px;"><span>OTS '+esc(p.otsDate||'-')+'</span><span>PPAP '+esc(p.ppapDate||'-')+'</span><span>SOP '+esc(p.sopDate||'-')+'（提成起算）</span></div>'+
       '<div class="meta" style="margin-top:6px;"><span class="tag '+(p.ppapStatus==='PSW回签'?'green':p.ppapStatus==='提交'?'orange':'blue')+'">PPAP：'+esc(p.ppapStatus||'未提交')+(p.ppapStatus==='提交'&&p.ppapSubmit?'（'+esc(p.ppapSubmit)+'）':'')+'</span>'+
       rs.map(x=>{const m=moldCommOf(x,p.ppapStatus);if(!m)return '';
-        return '<span class="tag '+(m.mode==='已提'?'green':m.mode==='待提'?'orange':'blue')+'">模具提成 '+(x.partNo?esc(x.partNo)+' ':'')+fmtRMB(m.fee)+' · '+m.mode+'</span>';}).join('')+'</div>'+
+        return '<span class="tag '+(m.mode==='已提'?'green':m.mode==='待提'?'orange':'blue')+'">模具 '+(x.partNo?esc(x.partNo)+' ':'')+fmtRMB(m.fee)+' · '+m.mode+(m.mode==='分摊'?'':' · 提成 '+fmtRMB(m.amt))+'</span>';}).join('')+'</div>'+
       '<div class="nums">'+
       '<div><span>EAV 年均'+(multi?'合计':'')+'</span><b>'+fmt(eavSum,0)+' 件</b></div>'+
       '<div><span>年均销售额'+(multi?'合计':'')+'</span><b style="color:var(--blue-d)">'+fmtRMB(salesSum)+'</b></div>'+
@@ -900,6 +948,7 @@ function renderProjList(){
       '<div><span>提成期限 / 截止</span><b>'+cc.years+' 年<span style="font-size:11px;color:var(--sub)">（'+(p.sopDate?addYears(p.sopDate,cc.years):'-')+'）</span></b></div>'+
       '<div><span>量产提成总额'+(multi?'（合计）':'')+'</span><b style="color:var(--orange)">'+fmtRMB(total)+'</b></div>'+
       '<div><span>一次性定点提成</span><b>'+fmtRMB(num(p.oneTimeBonus))+'</b></div>'+
+      '<div><span>模具提成额'+(multi?'（合计）':'')+'</span><b>'+fmtRMB(moldAmt)+'</b></div>'+
       '<div><span>本项目提成合计</span><b style="color:var(--red)">'+fmtRMB(grand)+'</b></div></div>'+
       '<div class="ops"><button class="btn btn-g btn-sm" onclick="openProjectForm(\''+p.id+'\')">编辑</button>'+
       '<button class="btn btn-g btn-sm" onclick="toggleProjStatus(\''+p.id+'\')">'+(p.status==='进行中'?'标记结束':'重新激活')+'</button>'+
@@ -939,7 +988,7 @@ function previewProjCalc(){
   const r=DB.rfqs.find(x=>x.id===document.getElementById('p_rfq').value);
   const cc=commCalc(r);if(!cc)return;
   document.getElementById('projCalcBar').innerHTML=
-    '客户类型 <b>'+esc(cc.ctype)+'</b>　|　EAV <b>'+fmt(cc.eav,0)+'</b> 件　|　最终单价 <b>'+fmt(cc.fp)+' '+esc(r.currency)+'</b> @ '+r.fxRate+'<br>'+
+    '客户类型 <b>'+esc(cc.ctype)+'</b>　|　EAV <b>'+fmt(cc.eav,0)+'</b> 件　|　对外报价 <b>'+fmt(extPriceOf(r))+' '+esc(r.currency)+'</b>（裸价 ¥'+fmt(r.barePrice)+' @ '+r.fxRate+'）<br>'+
     '毛利率 <b>'+(cc.margin*100).toFixed(1)+'%</b>（'+(cc.margin<0.3?'&lt;30%，对赌系数 0.5':'≥30%，系数 1')+'）　|　提成比例 <b>'+(cc.rate*100).toFixed(2)+'%</b>　|　期限 <b>'+cc.years+' 年</b>　|　量产提成 <b>'+fmtRMB(cc.total)+'</b>';
 }
 function saveProject(id){
@@ -1041,13 +1090,13 @@ function exportRFQCSV(){
     const c=clientOf(r),cc=commCalc(r);
     return [r.code,c?c.code:'',c?c.name:'',c?c.type:'',r.project,r.partNo||'',r.segment,r.subcat,r.status,
       r.sopYear,r.lifecycle,Object.keys(r.demands||{}).sort().map(y=>y+':'+r.demands[y]).join('; '),Math.round(cc.eav),
-      r.currency,r.fxRate,r.cost,r.barePrice,r.moldFee,r.moldQty,fmt(amortOf(r)),fmt(cc.fp),
-      (cc.margin*100).toFixed(1)+'%',r.lta+'%',r.ltaYears||0,Math.round(annualSalesOf(r)),
+      r.currency,r.fxRate,Math.round(num(r.cost)*100)/100,Math.round(num(r.barePrice)*100)/100,r.moldFee,r.moldQty,fmt(amortOf(r)),fmt(extPriceOf(r)),
+      r.incoterms||'',(cc.margin*100).toFixed(1)+'%',(r.ltaRates||[]).map(x=>x+'%').join('/'),r.moldCommRate||0,Math.round(annualSalesOf(r)),
       r.plant?r.plant.name||'':'',r.plant?r.plant.contact||'':'',r.plant?r.plant.email||'':'',
-      (r.revs||[]).map(v=>v.ver+' '+v.date+' '+v.price).join('; ')];
+      (r.revs||[]).map(v=>v.ver+' '+v.date+' '+(v.priceFx!=null?v.priceFx:v.price)).join('; ')];
   });
   downloadCSV('RFQ询价导出_'+todayStr()+'.csv',
-    ['RFQ ID','客户代码','客户名称','客户类型','项目名称','零件号','业务板块','产品细分','状态','SOP年份','生命周期(年)','阶梯需求(年:量)','EAV年均','币种','报价汇率','单件成本','单件裸价','模具总费','模具分摊数量','单件分摊额','最终对外单价','核算毛利率','LTA年降','年降年数','年均销售额(RMB)','收货工厂','采购联系人','联系人邮箱','Rev报价历史'],rows);
+    ['RFQ ID','客户代码','客户名称','客户类型','项目名称','零件号','业务板块','产品细分','状态','SOP年份','生命周期(年)','阶梯需求(年:量)','EAV年均','币种','报价汇率','单件成本(RMB)','单件裸价(RMB)','模具总费(RMB)','模具分摊数量','单件分摊额(RMB)','对外报价(外币)','Incoterms','核算毛利率','LTA逐年降幅','模具提成比例%','年均销售额EAR(RMB)','收货工厂','采购联系人','联系人邮箱','Rev报价历史'],rows);
 }
 function exportProjCSV(){
   if(!DB.projects.length){alert('暂无项目数据');return;}
@@ -1061,10 +1110,10 @@ function exportProjCSV(){
       p.ppapStatus||'未提交',p.ppapSubmit||'',moldStr,
       Math.round(eavSum),Math.round(salesSum),
       cc0?(cc0.margin*100).toFixed(1)+'%':'',cc0?(cc0.rate*100).toFixed(2)+'%':'',cc0?cc0.years:'',
-      p.sopDate&&cc0?addYears(p.sopDate,cc0.years):'',Math.round(total),num(p.oneTimeBonus),Math.round(total+num(p.oneTimeBonus)),p.status];
+      p.sopDate&&cc0?addYears(p.sopDate,cc0.years):'',Math.round(total),num(p.oneTimeBonus),Math.round(moldCommSum(p)),Math.round(total+num(p.oneTimeBonus)+moldCommSum(p)),p.status];
   });
   downloadCSV('项目提成导出_'+todayStr()+'.csv',
-    ['RFQ ID(多个)','项目名称','零件号(多个)','客户P/N','内部工程号','SAP物料号','OTS交样','PPAP提交','SOP量产日','PPAP状态','PPAP提交时间','模具费提成(零件:状态 金额)','EAV年均合计','年均销售额合计(RMB)','核算毛利率','最终提成比例','提成期限(年)','提成截止日期','量产提成总额(RMB)','一次性定点提成(RMB)','提成合计(RMB)','状态'],rows);
+    ['RFQ ID(多个)','项目名称','零件号(多个)','客户P/N','内部工程号','SAP物料号','OTS交样','PPAP提交','SOP量产日','PPAP状态','PPAP提交时间','模具费提成(零件:状态 金额)','EAV年均合计','年均销售额EAR合计(RMB)','核算毛利率','最终提成比例','提成期限(年)','提成截止日期','量产提成总额(RMB)','一次性定点提成(RMB)','模具提成额(RMB)','提成合计(RMB)','状态'],rows);
 }
 function importJSON(ev){
   const f=ev.target.files[0];if(!f)return;
