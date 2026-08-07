@@ -537,6 +537,8 @@ function baseTxtOf(cc){return cc.yearBases.map(x=>(x*100).toFixed(1)+'%').join('
 function rfqIdsOf(p){return p.rfqIds||(p.rfqId?[p.rfqId]:[]);}
 function rfqOfProject(p){const ids=rfqIdsOf(p);return DB.rfqs.find(r=>r.id===ids[0])||null;}
 function rfqsOfProject(p){return rfqIdsOf(p).map(id=>DB.rfqs.find(r=>r.id===id)).filter(Boolean);}
+/* 孤儿项目（关联 RFQ 已全部被删）不计入看板统计：KPI / 甘特图 / 节点提醒统一过滤 */
+function validProjs(list){return list.filter(p=>rfqsOfProject(p).length>0);}
 /* 量产提成总额 = 各零件『按年明细推演』之和（KPI 池 / 项目卡片 / Excel 导出统一口径） */
 function projCommSum(p){return rfqsOfProject(p).reduce((s,r)=>{const cy=commYearsOf(r);return s+(cy?cy.total:0);},0);}
 /* 模具费提成（防重 / 互斥逻辑）：
@@ -624,7 +626,7 @@ function renderFocus(){
   DB.rfqs.filter(r=>r.status==='收到询价'&&(r.created||'')<=addDays(t,-3)).forEach(r=>items.push({
     html:'<span class="tag blue">待核价</span>'+esc(r.code)+' · '+esc(r.project)+' <span class="muted">收到已超 3 天</span>',
     btn:'<button class="btn btn-p btn-sm" onclick="advanceRFQ(\''+r.id+'\')">开始核价</button>',od:false}));
-  DB.projects.filter(p=>p.status==='进行中').forEach(p=>{
+  validProjs(DB.projects.filter(p=>p.status==='进行中')).forEach(p=>{
     const r=rfqOfProject(p);const name=r?(r.code+' '+r.project):'项目';
     [['otsDate','OTS 交样','blue'],['ppapDate','PPAP 提交','orange']].forEach(m=>{
       const d=p[m[0]];
@@ -640,7 +642,7 @@ function renderFocus(){
 
 /* ---------- KPI ---------- */
 function renderKPI(){
-  const act=DB.projects.filter(p=>p.status==='进行中');
+  const act=validProjs(DB.projects.filter(p=>p.status==='进行中'));
   const eavPan=DB.rfqs.filter(r=>r.status!=='丢单').reduce((s,r)=>s+eavOf(r),0);
   const spotPool=act.reduce((s,p)=>s+num(p.oneTimeBonus),0);
   const massPool=act.reduce((s,p)=>s+projCommSum(p),0);
@@ -667,7 +669,7 @@ function renderAttack(){
 
 /* ---------- Gantt ---------- */
 function renderGantt(){
-  const projs=DB.projects.filter(p=>p.status==='进行中');
+  const projs=validProjs(DB.projects.filter(p=>p.status==='进行中'));
   /* 首屏图纸/文档直达按钮（项目含 docUrl 时渲染，新标签页打开） */
   document.getElementById('ganttDocs').innerHTML=projs.filter(p=>p.docUrl).map(p=>{
     const r=rfqOfProject(p);
@@ -850,6 +852,8 @@ function delRFQ(id){
   if(!confirm('确认删除该 RFQ？关联项目将失去联动数据。'))return;
   DB.rfqs=DB.rfqs.filter(r=>r.id!==id);
   DB.projects.forEach(p=>{if(p.rfqIds)p.rfqIds=p.rfqIds.filter(x=>x!==id);});
+  /* 自动清理：最后一个零件被删的项目直接移除，避免产生统计口径不一致的孤儿项目 */
+  DB.projects=DB.projects.filter(p=>rfqIdsOf(p).length>0);
   save();
 }
 function openRFQForm(id){
@@ -1074,7 +1078,13 @@ function renderProjList(){
   const list=DB.projects.filter(match);
   document.getElementById('projList').innerHTML=list.length?list.map(p=>{
     const rs=rfqsOfProject(p);const r=rs[0];const cc=commCalc(r);
-    if(!r||!cc)return '';
+    /* 孤儿项目：关联 RFQ 已全部被删 → 显式渲染残缺卡片（可删除），不再隐身 */
+    if(!r||!cc){
+      return '<div class="item" style="border-color:#fecaca;background:#fef2f2;"><div class="head"><b>'+esc(p.custPN||p.internalPN||p.sapCode||'未命名项目')+'</b>'+
+        '<span class="tag red">数据残缺</span></div>'+
+        '<div class="meta"><span>关联的 RFQ / 零件已被删除，该项目已不参与看板统计与提成计算。建议删除此残留项目。</span></div>'+
+        '<div class="ops"><button class="btn btn-r btn-sm" onclick="delProject(\''+p.id+'\')">删除残留项目</button></div></div>';
+    }
     const multi=rs.length>1;
     const total=projCommSum(p),moldAmt=moldCommSum(p),grand=total+num(p.oneTimeBonus)+moldAmt;
     const eavSum=rs.reduce((s,x)=>s+eavOf(x),0),salesSum=rs.reduce((s,x)=>s+annualSalesOf(x),0);
