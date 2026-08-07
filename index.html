@@ -328,7 +328,10 @@ function migrate(){
     if(r.ltaYears===undefined)r.ltaYears=num(r.lta)>0?3:0;
   });
   /* 项目模型升级：单 rfqId → rfqIds 数组（支持同项目多零件合并） */
-  DB.projects.forEach(p=>{if(p.rfqId!==undefined){if(!p.rfqIds)p.rfqIds=[p.rfqId];delete p.rfqId;}});
+  DB.projects.forEach(p=>{
+    if(p.rfqId!==undefined){if(!p.rfqIds)p.rfqIds=[p.rfqId];delete p.rfqId;}
+    if(p.ppapStatus===undefined)p.ppapStatus='未提交';
+  });
 }
 function load(){
   for(const k in LS){try{DB[k]=JSON.parse(localStorage.getItem(LS[k]))||[];}catch(e){DB[k]=[];}}
@@ -369,7 +372,7 @@ function seed(){
       status:'收到询价',sample:true,created:addDays(todayStr(),-4),revs:[]}
   ];
   DB.projects=[{id:uid(),rfqIds:[r3.id],custPN:'ZF-1358-301-024',internalPN:'EG-C-26031',sapCode:'SAP-80001122',
-    otsDate:'2026-01-15',ppapDate:'2026-04-30',sopDate:'2026-08-20',oneTimeBonus:3000,status:'进行中',
+    otsDate:'2026-01-15',ppapDate:'2026-04-30',sopDate:'2026-08-20',ppapStatus:'提交',ppapSubmit:'2026-04-28',oneTimeBonus:3000,status:'进行中',
     doneMile:['2026-01-15'],sample:true}];
   DB.todos=[
     {id:uid(),text:'ZF RFQ-26-001 技术答疑资料回复 Hans',important:true,urgent:true,due:addDays(todayStr(),-1),done:false,sample:true},
@@ -418,6 +421,12 @@ function rfqIdsOf(p){return p.rfqIds||(p.rfqId?[p.rfqId]:[]);}
 function rfqOfProject(p){const ids=rfqIdsOf(p);return DB.rfqs.find(r=>r.id===ids[0])||null;}
 function rfqsOfProject(p){return rfqIdsOf(p).map(id=>DB.rfqs.find(r=>r.id===id)).filter(Boolean);}
 function projCommSum(p){return rfqsOfProject(p).reduce((s,r)=>{const c=commCalc(r);return s+(c?c.total:0);},0);}
+/* 模具费提成状态：RFQ 有模具分摊 → 「分摊」（随单价摊销）；无分摊则按 PPAP 状态：回签=已提，未提交/提交=待提 */
+function moldCommOf(r,ppapStatus){
+  if(!num(r.moldFee))return null;
+  if(num(r.moldQty)>0)return {mode:'分摊',fee:num(r.moldFee)*num(r.fxRate)};
+  return {mode:ppapStatus==='PSW回签'?'已提':'待提',fee:num(r.moldFee)*num(r.fxRate)};
+}
 
 /* ============================================================
    渲染框架
@@ -856,6 +865,9 @@ function renderProjList(){
       '<div class="meta">'+rs.map(x=>'<span>'+esc(x.code)+(x.partNo?' · P/N '+esc(x.partNo):'')+'</span>').join('')+'</div>'+
       '<div class="meta" style="margin-top:4px;"><span>客户P/N '+esc(p.custPN||'-')+'</span><span>内部工程号 '+esc(p.internalPN||'-')+'</span><span>SAP '+esc(p.sapCode||'-')+'</span></div>'+
       '<div class="meta" style="margin-top:4px;"><span>OTS '+esc(p.otsDate||'-')+'</span><span>PPAP '+esc(p.ppapDate||'-')+'</span><span>SOP '+esc(p.sopDate||'-')+'（提成起算）</span></div>'+
+      '<div class="meta" style="margin-top:6px;"><span class="tag '+(p.ppapStatus==='PSW回签'?'green':p.ppapStatus==='提交'?'orange':'blue')+'">PPAP：'+esc(p.ppapStatus||'未提交')+(p.ppapStatus==='提交'&&p.ppapSubmit?'（'+esc(p.ppapSubmit)+'）':'')+'</span>'+
+      rs.map(x=>{const m=moldCommOf(x,p.ppapStatus);if(!m)return '';
+        return '<span class="tag '+(m.mode==='已提'?'green':m.mode==='待提'?'orange':'blue')+'">模具提成 '+(x.partNo?esc(x.partNo)+' ':'')+fmtRMB(m.fee)+' · '+m.mode+'</span>';}).join('')+'</div>'+
       '<div class="nums">'+
       '<div><span>EAV 年均'+(multi?'合计':'')+'</span><b>'+fmt(eavSum,0)+' 件</b></div>'+
       '<div><span>年均销售额'+(multi?'合计':'')+'</span><b style="color:var(--blue-d)">'+fmtRMB(salesSum)+'</b></div>'+
@@ -890,6 +902,8 @@ function openProjectForm(id,rfqId){
   '<div><label class="f">一次性定点提成（RMB，手动）</label><input type="number" id="p_oneTime" value="'+esc(v('oneTimeBonus'))+'"></div>'+
   '<div><label class="f">OTS 计划交样日</label><input type="date" id="p_ots" value="'+esc(v('otsDate'))+'"></div>'+
   '<div><label class="f">PPAP 计划提交日</label><input type="date" id="p_ppap" value="'+esc(v('ppapDate'))+'"></div>'+
+  '<div><label class="f">PPAP 状态（影响模具费提成）</label><select id="p_ppapStatus" onchange="if(this.value===\'提交\'&&!document.getElementById(\'p_ppapSubmit\').value)document.getElementById(\'p_ppapSubmit\').value=todayStr()">'+['未提交','提交','PSW回签'].map(s=>'<option'+(v('ppapStatus','未提交')===s?' selected':'')+'>'+s+'</option>').join('')+'</select></div>'+
+  '<div><label class="f">PPAP 提交时间</label><input type="date" id="p_ppapSubmit" value="'+esc(v('ppapSubmit'))+'"></div>'+
   '<div><label class="f">SOP 量产日（提成起算锚点）</label><input type="date" id="p_sop" value="'+esc(v('sopDate'))+'"></div>'+
   '</div>'+
   '<div class="calcbar" id="projCalcBar"></div>'+
@@ -909,7 +923,8 @@ function saveProject(id){
   const rfqId=g('p_rfq').value;
   const data={custPN:g('p_custPN').value.trim(),internalPN:g('p_internalPN').value.trim(),
     sapCode:g('p_sapCode').value.trim(),oneTimeBonus:num(g('p_oneTime').value),
-    otsDate:g('p_ots').value,ppapDate:g('p_ppap').value,sopDate:g('p_sop').value};
+    otsDate:g('p_ots').value,ppapDate:g('p_ppap').value,sopDate:g('p_sop').value,
+    ppapStatus:g('p_ppapStatus').value,ppapSubmit:g('p_ppapSubmit').value};
   if(id){Object.assign(DB.projects.find(x=>x.id===id),data);closeModal();save();return;}
   const rfq=DB.rfqs.find(x=>x.id===rfqId);if(!rfq)return;
   /* 多零件自动整合：同客户 + 同项目名称 + 进行中 → 并入现有项目 */
@@ -1016,14 +1031,16 @@ function exportProjCSV(){
     const rs=rfqsOfProject(p),r0=rs[0],cc0=commCalc(r0);
     const total=projCommSum(p);
     const eavSum=rs.reduce((s,x)=>s+eavOf(x),0),salesSum=rs.reduce((s,x)=>s+annualSalesOf(x),0);
+    const moldStr=rs.map(x=>{const m=moldCommOf(x,p.ppapStatus);return m?(x.partNo||x.code)+':'+m.mode+' '+Math.round(m.fee):'';}).filter(Boolean).join('; ');
     return [rs.map(x=>x.code).join('; '),r0?r0.project:'',rs.map(x=>x.partNo||'').filter(Boolean).join('; '),
       p.custPN||'',p.internalPN||'',p.sapCode||'',p.otsDate||'',p.ppapDate||'',p.sopDate||'',
+      p.ppapStatus||'未提交',p.ppapSubmit||'',moldStr,
       Math.round(eavSum),Math.round(salesSum),
       cc0?(cc0.margin*100).toFixed(1)+'%':'',cc0?(cc0.rate*100).toFixed(2)+'%':'',cc0?cc0.years:'',
       p.sopDate&&cc0?addYears(p.sopDate,cc0.years):'',Math.round(total),num(p.oneTimeBonus),Math.round(total+num(p.oneTimeBonus)),p.status];
   });
   downloadCSV('项目提成导出_'+todayStr()+'.csv',
-    ['RFQ ID(多个)','项目名称','零件号(多个)','客户P/N','内部工程号','SAP物料号','OTS交样','PPAP提交','SOP量产日','EAV年均合计','年均销售额合计(RMB)','核算毛利率','最终提成比例','提成期限(年)','提成截止日期','量产提成总额(RMB)','一次性定点提成(RMB)','提成合计(RMB)','状态'],rows);
+    ['RFQ ID(多个)','项目名称','零件号(多个)','客户P/N','内部工程号','SAP物料号','OTS交样','PPAP提交','SOP量产日','PPAP状态','PPAP提交时间','模具费提成(零件:状态 金额)','EAV年均合计','年均销售额合计(RMB)','核算毛利率','最终提成比例','提成期限(年)','提成截止日期','量产提成总额(RMB)','一次性定点提成(RMB)','提成合计(RMB)','状态'],rows);
 }
 function importJSON(ev){
   const f=ev.target.files[0];if(!f)return;
