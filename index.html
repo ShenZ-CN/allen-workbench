@@ -643,7 +643,8 @@ function renderFocus(){
 /* ---------- KPI ---------- */
 function renderKPI(){
   const act=validProjs(DB.projects.filter(p=>p.status==='进行中'));
-  const eavPan=DB.rfqs.filter(r=>r.status!=='丢单').reduce((s,r)=>s+eavOf(r),0);
+  /* EAV 总盘面 = 进行中项目关联零件的需求合计（与项目模块口径一致，删项目即归零） */
+  const eavPan=act.reduce((s,p)=>s+rfqsOfProject(p).reduce((a,r)=>a+eavOf(r),0),0);
   const spotPool=act.reduce((s,p)=>s+num(p.oneTimeBonus),0);
   const massPool=act.reduce((s,p)=>s+projCommSum(p),0);
   document.getElementById('kpiGrid').innerHTML=
@@ -936,21 +937,23 @@ function syncPricingArea(init){
     '<div class="muted" style="margin-top:6px;">按 SOP '+sop+' 年起 '+lc+' 年生命周期自动生成；留空年份不计入 EAV 平均（上限 20 年）。</div>';
   previewCalc();
 }
-/* Rev 归档条目（只读展示，兼容旧版 {ver,date,price,note} 格式） */
-function revItemHTML(rv){
-  if(rv.priceFx!=null||rv.bare!=null){
-    return '<div class="meta" style="padding:8px 10px;background:#f8fafc;border-radius:8px;margin-bottom:6px;"><b>'+esc(rv.ver)+'</b> · '+esc(rv.date)+
-      ' · 成本 ¥'+fmt(rv.cost,3)+' · 裸价 ¥'+fmt(rv.bare,3)+' · 对外 '+fmt(rv.priceFx,3)+' '+esc(rv.currency||'')+' · 模具 ¥'+fmt(rv.moldFee,0)+'</div>';
-  }
-  return '<div class="meta" style="padding:8px 10px;background:#f8fafc;border-radius:8px;margin-bottom:6px;"><b>'+esc(rv.ver||'Rev')+'</b> · '+esc(rv.date||'-')+' · 对外价 '+fmt(rv.price)+'（旧版外币口径）'+(rv.note?' · '+esc(rv.note):'')+'</div>';
+/* Rev 归档条目（兼容旧版 {ver,date,price,note} 格式）；编辑态附删除按钮（保存后生效） */
+function revItemHTML(rv,idx){
+  const delBtn=idx!=null?'<button class="btn btn-r btn-sm" style="min-height:28px;padding:2px 10px;flex:0 0 auto;" onclick="delRev('+idx+')">删除</button>':'';
+  const inner=(rv.priceFx!=null||rv.bare!=null)
+    ?'<b>'+esc(rv.ver)+'</b> · '+esc(rv.date)+' · 成本 ¥'+fmt(rv.cost,3)+' · 裸价 ¥'+fmt(rv.bare,3)+' · 对外 '+fmt(rv.priceFx,3)+' '+esc(rv.currency||'')+' · 模具 ¥'+fmt(rv.moldFee,0)
+    :'<b>'+esc(rv.ver||'Rev')+'</b> · '+esc(rv.date||'-')+' · 对外价 '+fmt(rv.price)+'（旧版外币口径）'+(rv.note?' · '+esc(rv.note):'');
+  return '<div class="meta" style="padding:8px 10px;background:#f8fafc;border-radius:8px;margin-bottom:6px;display:flex;align-items:center;gap:8px;"><span style="flex:1;min-width:0;">'+inner+'</span>'+delBtn+'</div>';
 }
-/* 一键归档：抓取当前表单数据生成不可编辑的 Rev 条目 */
+function renderRevList(){document.getElementById('revList').innerHTML=(window._editRevs||[]).map((rv,i)=>revItemHTML(rv,i)).join('');}
+function delRev(i){if(!confirm('删除该条 Rev 报价历史？（点「保存」后生效）'))return;window._editRevs.splice(i,1);renderRevList();}
+/* 一键归档：抓取当前表单数据生成 Rev 条目 */
 function archiveRev(){
   const r=readRFQForm();
   window._editRevs=window._editRevs||[];
   window._editRevs.push({ver:'Rev.'+(window._editRevs.length+1),date:todayStr(),cost:r.cost,bare:r.barePrice,
     priceFx:extPriceOf(r),currency:r.currency,moldFee:r.moldFee});
-  document.getElementById('revList').innerHTML=window._editRevs.map(revItemHTML).join('');
+  renderRevList();
 }
 /* 动态阶梯年降：按年数 N 生成 N 个百分比输入框 */
 function currentLtaRates(){return Array.prototype.map.call(document.querySelectorAll('.f_ltar'),i=>i.value);}
