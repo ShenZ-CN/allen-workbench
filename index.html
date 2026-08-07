@@ -362,7 +362,22 @@ function fmtRMB(n){if(Math.abs(n)>=10000)return '¥'+fmt(n/10000,1)+'万';return
 function todayStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function addDays(ds,n){const d=new Date(ds+'T00:00:00');d.setDate(d.getDate()+n);return d.toISOString().slice(0,10);}
 function addYears(ds,y){const d=new Date(ds+'T00:00:00');d.setFullYear(d.getFullYear()+y);return d.toISOString().slice(0,10);}
-function save(){for(const k in LS)localStorage.setItem(LS[k],JSON.stringify(DB[k]));render();}
+/* ============================================================
+   全局响应式状态总线（Store / Event Bus）
+   所有数据变更必须经 commit() 提交：持久化 localStorage → 广播 → 订阅者（看板+各模块）统一重渲染，
+   保证「询价 / 项目 / 客户」任何新增、编辑、删除、状态/金额变更后，看板的今日待办、KPI、
+   商机攻坚、节点排期、待办矩阵全部无刷新即时同步。
+============================================================ */
+const Bus={subs:[],on(fn){this.subs.push(fn);},emit(){this.subs.forEach(f=>{try{f();}catch(e){}});}};
+function commit(){for(const k in LS)localStorage.setItem(LS[k],JSON.stringify(DB[k]));Bus.emit();}
+function save(){commit();}
+Bus.on(render);
+/* 跨标签页同步：其他标签页/窗口写入本工作台数据时，本页自动重载并重渲染（不写回，避免循环广播） */
+window.addEventListener('storage',function(e){
+  if(!e.key||Object.keys(LS).map(k=>LS[k]).indexOf(e.key)<0)return;
+  try{for(const k in LS)DB[k]=JSON.parse(localStorage.getItem(LS[k]))||[];}catch(err){}
+  migrate();Bus.emit();
+});
 /* 历史数据自动迁移：v1 的 y1-y5 → demands；v2 的 eavDirect 直填 → 平铺到生命周期各年 */
 function migrate(){
   DB.rfqs.forEach(r=>{
@@ -486,20 +501,39 @@ function extPriceOf(r){const fx=num(r.fxRate);return fx>0?finalPriceOf(r)/fx:0;}
 /* 制造成本(RMB) = 单件成本 × 0.87（扣 13% 进项）；核算毛利率绝不包含模具分摊 */
 function marginOf(r){const b=num(r.barePrice);return b>0?(b-num(r.cost)*0.87)/b:0;}
 function clientOf(r){return DB.clients.find(c=>c.id===r.clientId)||null;}
+/* ============================================================
+   提成规则引擎 v2（Commission Engine）
+   · 保持架：1 年期（仅 SOP 首年 Y1）；
+     子类属 ['大TRB','特大TRB','机加工','复合机加工'] → 基础费率 0.5%；其他子类 → 1.0%
+   · 汽车零部件：3 年期，分年基础费率递减 Y1 0.6% / Y2 0.3% / Y3 0.1%
+   · EGC 映射：防尘盖 → 保持架(其他子类)规则；冲压件 → 汽车零部件规则
+   · 每年最终提成比例 = 该年基础费率 × 客户系数 × 毛利率系数
+============================================================ */
 function commCalc(r){
   if(!r)return null;
   const client=clientOf(r);
-  const seg=r.segment,ctype=client?client.type:'新客户';
+  const seg=r.segment,sub=r.subcat,ctype=client?client.type:'新客户';
   const margin=marginOf(r);
-  const base=seg==='保持架'?0.01:0.006;
+  let yearBases;
+  if(seg==='汽车零部件'||(seg==='EGC'&&sub==='冲压件')){
+    yearBases=[0.006,0.003,0.001]; /* 汽车零部件 3 年递减 */
+  }else{
+    /* 保持架 及 EGC-防尘盖：1 年期 */
+    yearBases=[['大TRB','特大TRB','机加工','复合机加工'].indexOf(sub)>=0?0.005:0.01];
+  }
   const mCoef=margin<0.3?0.5:1;
   const cCoef=ctype==='老客户'?0.5:1;
-  const rate=base*mCoef*cCoef;
-  const years=seg==='保持架'?1:3;
+  const rates=yearBases.map(b=>b*mCoef*cCoef); /* 分年最终提成比例 */
+  const years=yearBases.length;
   const eav=eavOf(r),fp=finalPriceOf(r);
+  const base=yearBases[0],rate=rates[0]; /* Y1 口径（列表速览 / 模具提成沿用） */
   const total=fp*eav*rate*years;
-  return {margin,base,mCoef,cCoef,rate,years,eav,fp,total,ctype,client};
+  return {margin,base,mCoef,cCoef,rate,rates,yearBases,years,eav,fp,total,ctype,client};
 }
+/* 分年最终提成比例展示：1 年期 "0.50%"；3 年期 "0.30%/0.15%/0.05%" */
+function rateTxtOf(cc){return cc.rates.map(x=>(x*100).toFixed(2)+'%').join(' / ');}
+/* 计算提示：基础费率(分年) × 毛利系数 × 客户系数 */
+function baseTxtOf(cc){return cc.yearBases.map(x=>(x*100).toFixed(1)+'%').join('/')+' × '+cc.mCoef+' × '+cc.cCoef;}
 function rfqIdsOf(p){return p.rfqIds||(p.rfqId?[p.rfqId]:[]);}
 function rfqOfProject(p){const ids=rfqIdsOf(p);return DB.rfqs.find(r=>r.id===ids[0])||null;}
 function rfqsOfProject(p){return rfqIdsOf(p).map(id=>DB.rfqs.find(r=>r.id===id)).filter(Boolean);}
@@ -518,11 +552,12 @@ function moldCommOf(r,ppapStatus){
 }
 function moldCommSum(p){return rfqsOfProject(p).reduce((s,r)=>{const m=moldCommOf(r,p.ppapStatus);return s+(m?m.amt:0);},0);}
 /* 量产提成『按年明细推演』（核心算力升级）：
-   第 N 年提成额(RMB) = 第 N 年需求量 × 第 N 年单价裸价(RMB) × 最终提成比例
+   第 N 年提成额(RMB) = 第 N 年需求量 × 第 N 年单价裸价(RMB) × 第 N 年最终提成比例
    · 第 N 年裸价(RMB) = priceLadder 推演的当年对外裸价(外币) × 报价汇率（脱水口径，不含模具分摊）；
      超出推演年数沿用最后一年裸价；销售额口径，不扣减制造成本
+   · 第 N 年最终提成比例 = 该年基础费率 × 客户系数 × 毛利率系数（汽车零部件 3 年递减）
    · 第 N 年需求量：优先取阶梯需求 demands 对应年份，为空则取 EAV
-   · 提成期从 SOP 年份起算，年数 = commCalc(r).years（保持架 1 年 / 其他 3 年） */
+   · 提成期从 SOP 年份起算，年数 = commCalc(r).years（保持架/EGC防尘盖 1 年；汽车零部件/EGC冲压件 3 年） */
 function commYearsOf(r){
   const cc=commCalc(r);if(!cc)return null;
   const fx=num(r.fxRate)||1,sop=num(r.sopYear)||new Date().getFullYear();
@@ -534,8 +569,8 @@ function commYearsOf(r){
     const y=sop+i;
     const bareFx=byYear[y]!=null?byYear[y]:lastPrice;
     const qty=num((r.demands||{})[y])>0?num(r.demands[y]):cc.eav;
-    const amt=qty*bareFx*fx*cc.rate;
-    rows.push({year:y,label:'Y'+(i+1),qty:qty,bareFx:bareFx,amt:amt});
+    const amt=qty*bareFx*fx*cc.rates[i];
+    rows.push({year:y,label:'Y'+(i+1),qty:qty,bareFx:bareFx,rate:cc.rates[i],amt:amt});
     total+=amt;
   }
   return {rows:rows,total:total,cc:cc};
@@ -561,6 +596,7 @@ function buildTabs(){
 }
 function switchTab(id){
   curTab=id;
+  render(); /* 切换 Tab 时强制全量重渲染，确保看板/列表永远展示最新状态 */
   document.querySelectorAll('.tabpage').forEach(p=>p.classList.toggle('on',p.id==='page-'+id));
   document.querySelectorAll('[data-t]').forEach(b=>b.classList.toggle('on',b.dataset.t===id));
   window.scrollTo(0,0);
@@ -794,7 +830,7 @@ function renderRFQList(){
       '<div><span>对外报价(外币)</span><b>'+fmt(extPriceOf(r),3)+' '+esc(r.currency)+'</b></div>'+
       '<div><span>年均销售额 EAR</span><b style="color:var(--blue-d)">'+fmtRMB(annualSalesOf(r))+'</b></div>'+
       '<div><span>核算毛利率</span><b style="color:'+(cc.margin<0.3?'var(--red)':'var(--green)')+'">'+(cc.margin*100).toFixed(1)+'%</b></div>'+
-      '<div><span>若赢单·提成比例</span><b>'+(cc.rate*100).toFixed(2)+'%</b></div></div>'+
+      '<div><span>若赢单·提成比例'+(cc.years>1?'（'+cc.years+'年递减）':'')+'</span><b>'+rateTxtOf(cc)+'</b></div></div>'+
       ((r.ltaRates||[]).length?'<div class="meta" style="margin-top:6px;"><span style="color:var(--orange)">对外裸价年降轨迹（LTA '+r.ltaRates.map(x=>esc(x)+'%').join('/')+'）：</span><span>'+priceLadder(r).map(p=>p.year+'年 '+fmt(p.price,3)).join(' ➔ ')+' '+esc(r.currency)+'</span></div>'+
       '<div class="meta" style="margin-top:2px;"><span style="color:var(--red);font-size:11.5px;">(注：LTA仅针对单件裸价生效。模具分摊额在达到【分摊数量】后将自动从总单价中剔除)</span></div>':'')+
       '<div class="ops"><button class="btn btn-g btn-sm" onclick="openRFQForm(\''+r.id+'\')">编辑 / Rev 历史</button>'+
@@ -960,7 +996,7 @@ function previewCalc(){
       ['制造成本','¥'+fmt(num(r.cost)*0.87)+' <small>成本×0.87</small>'],
       ['核算毛利率',(cc.margin*100).toFixed(1)+'% <small>不含模具分摊</small>'],
       ['年均销售额 EAR',fmtRMB(annualSalesOf(r))+' <small>不含模具</small>'],
-      ['最终提成比例',(cc.rate*100).toFixed(2)+'% <small>'+(cc.base*100).toFixed(1)+'%×'+cc.mCoef+'×'+cc.cCoef+'</small>'],
+      ['最终提成比例',rateTxtOf(cc)+' <small>'+baseTxtOf(cc)+(cc.years>1?' · '+cc.years+'年递减':'')+'</small>'],
       ['对外模具费(外币)',fmt(num(r.moldFee)/fx)+' <small>'+esc(r.currency)+'</small>']
     ];
     document.getElementById('calcBar').innerHTML=
@@ -1046,7 +1082,7 @@ function renderProjList(){
     const commDetail=rs.map(x=>{
       const cy=commYearsOf(x);if(!cy)return '';
       return '<div style="margin-top:4px;"><span style="color:var(--orange);font-weight:600;">'+esc(x.code)+' 按年提成明细（提成期 '+cy.cc.years+' 年）：</span>'+
-        cy.rows.map(w=>'<span style="display:inline-block;margin:2px 12px 2px 0;">'+w.year+' ('+w.label+')：<b>'+fmtRMB(w.amt)+'</b>（销量 '+fmt(w.qty,0)+' · 裸价 '+fmt(w.bareFx,3)+' '+esc(x.currency)+'）</span>').join('')+
+        cy.rows.map(w=>'<span style="display:inline-block;margin:2px 12px 2px 0;">'+w.year+' ('+w.label+')：<b>'+fmtRMB(w.amt)+'</b>（销量 '+fmt(w.qty,0)+' · 裸价 '+fmt(w.bareFx,3)+' '+esc(x.currency)+' · 费率 '+(w.rate*100).toFixed(2)+'%）</span>').join('')+
         '<span style="display:inline-block;font-weight:700;color:var(--red);">加总 '+fmtRMB(cy.total)+'</span></div>';
     }).join('');
     return '<div class="item"><div class="head"><b>'+esc(multi?r.project:r.code+' · '+r.project)+'</b>'+
@@ -1064,7 +1100,7 @@ function renderProjList(){
       '<div><span>EAV 年均'+(multi?'合计':'')+'</span><b>'+fmt(eavSum,0)+' 件</b></div>'+
       '<div><span>年均销售额'+(multi?'合计':'')+'</span><b style="color:var(--blue-d)">'+fmtRMB(salesSum)+'</b></div>'+
       '<div><span>核算毛利率'+(multi?'（'+esc(r.code)+'）':'')+'</span><b style="color:'+(cc.margin<0.3?'var(--red)':'var(--green)')+'">'+(cc.margin*100).toFixed(1)+'%</b></div>'+
-      '<div><span>最终提成比例</span><b>'+(cc.rate*100).toFixed(2)+'%<span style="font-size:11px;color:var(--sub)">（'+(cc.base*100).toFixed(1)+'%×'+cc.mCoef+'×'+cc.cCoef+'）</span></b></div>'+
+      '<div><span>最终提成比例</span><b>'+rateTxtOf(cc)+'<span style="font-size:11px;color:var(--sub)">（'+baseTxtOf(cc)+'）</span></b></div>'+
       '<div><span>提成期限 / 截止</span><b>'+cc.years+' 年<span style="font-size:11px;color:var(--sub)">（'+(p.sopDate?addYears(p.sopDate,cc.years):'-')+'）</span></b></div>'+
       '<div><span>量产提成总额'+(multi?'（合计）':'')+'</span><b style="color:var(--orange)">'+fmtRMB(total)+'</b></div>'+
       '<div><span>一次性定点提成</span><b>'+fmtRMB(num(p.oneTimeBonus))+'</b></div>'+
@@ -1118,7 +1154,7 @@ function previewProjCalc(){
     ['EAV 年均需求',fmt(cc.eav,0)+' <small>件</small>'],
     ['对外报价(外币)',fmt(extPriceOf(r),3)+' '+esc(r.currency)+'<small>裸价 ¥'+fmt(r.barePrice,3)+' | 汇率 '+fmt(r.fxRate,4)+'</small>'],
     ['核算毛利率',(cc.margin*100).toFixed(1)+'% <small>'+(cc.margin<0.3?'&lt;30% · 对赌系数 0.5':'≥30% · 系数 1')+'</small>'],
-    ['最终提成比例',(cc.rate*100).toFixed(2)+'% <small>'+(cc.base*100).toFixed(1)+'%×'+cc.mCoef+'×'+cc.cCoef+'</small>'],
+    ['最终提成比例',rateTxtOf(cc)+' <small>'+baseTxtOf(cc)+'</small>'],
     ['提成期限',cc.years+' 年 <small>SOP 起算</small>'],
     ['量产提成',fmtRMB(cy?cy.total:0)+' <small>按年明细推演</small>']
   ];
@@ -1243,7 +1279,7 @@ function exportProjCSV(){
       p.custPN||'',p.internalPN||'',p.sapCode||'',p.otsDate||'',p.ppapDate||'',p.sopDate||'',
       p.ppapStatus||'未提交',p.ppapSubmit||'',moldStr,
       Math.round(eavSum),Math.round(salesSum),
-      cc0?(cc0.margin*100).toFixed(1)+'%':'',cc0?(cc0.rate*100).toFixed(2)+'%':'',cc0?cc0.years:'',
+      cc0?(cc0.margin*100).toFixed(1)+'%':'',cc0?rateTxtOf(cc0):'',cc0?cc0.years:'',
       p.sopDate&&cc0?addYears(p.sopDate,cc0.years):'',Math.round(total),num(p.oneTimeBonus),Math.round(moldCommSum(p)),Math.round(total+num(p.oneTimeBonus)+moldCommSum(p)),p.status];
   });
   downloadCSV('项目提成导出_'+todayStr()+'.csv',
