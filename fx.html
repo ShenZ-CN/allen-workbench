@@ -167,46 +167,63 @@ function drawChart(elId,points,color){
     '</svg>';
 }
 async function fetchJSON(url){
-  const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),8000);
+  const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),6000);
   try{const r=await fetch(url,{signal:ctl.signal});if(!r.ok)throw new Error(r.status);return await r.json();}
   finally{clearTimeout(to);}
 }
+/* 数据源1：jsDelivr currency-api（国内 CDN 节点，CORS 放行） */
+async function loadJsdelivr(){
+  const [eurT,usdT]=await Promise.all([
+    fetchJSON('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/eur.json'),
+    fetchJSON('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json')
+  ]);
+  setRate('v_eurcny','c_eurcny',eurT.eur.cny,null);
+  setRate('v_usdcny','c_usdcny',usdT.usd.cny,null);
+  setRate('v_eurusd','c_eurusd',eurT.eur.usd,null);
+  document.getElementById('srcNote').textContent='数据源：currency-api（jsDelivr CDN）· 更新于 '+(eurT.date||'--');
+  /* 历史走势图尝试 frankfurter，失败仅隐藏走势图不影响主显示 */
+  try{
+    const today=new Date(),d180=new Date(today.getTime()-183*86400000);
+    const rng=fmtDate(d180)+'..'+fmtDate(today);
+    const [eur,usd]=await Promise.all([
+      fetchJSON('https://api.frankfurter.dev/v1/'+rng+'?base=EUR&symbols=CNY'),
+      fetchJSON('https://api.frankfurter.dev/v1/'+rng+'?base=USD&symbols=CNY')
+    ]);
+    drawChart('chart_eurcny',Object.keys(eur.rates).sort().map(k=>[k,eur.rates[k].CNY]),'#2563eb');
+    drawChart('chart_usdcny',Object.keys(usd.rates).sort().map(k=>[k,usd.rates[k].CNY]),'#0d9488');
+  }catch(e){
+    drawChart('chart_eurcny',null);drawChart('chart_usdcny',null);
+  }
+}
+/* 数据源2：er-api.com 兜底 */
+async function loadErApi(){
+  const [a,b]=await Promise.all([
+    fetchJSON('https://open.er-api.com/v6/latest/EUR'),
+    fetchJSON('https://open.er-api.com/v6/latest/USD')
+  ]);
+  setRate('v_eurcny','c_eurcny',a.rates.CNY,null);
+  setRate('v_usdcny','c_usdcny',b.rates.CNY,null);
+  setRate('v_eurusd','c_eurusd',a.rates.USD,null);
+  drawChart('chart_eurcny',null);drawChart('chart_usdcny',null);
+  document.getElementById('srcNote').textContent='数据源：ER-API · 更新于 '+(a.time_last_update_utc||'--').slice(0,16);
+}
 async function loadAll(){
   document.getElementById('errBox').innerHTML='';
-  const today=new Date(),d180=new Date(today.getTime()-183*86400000);
-  const rng=fmtDate(d180)+'..'+fmtDate(today);
+  try{await loadJsdelivr();return;}catch(e){}
+  try{await loadErApi();return;}catch(e){}
   try{
     const [eur,usd,eu]=await Promise.all([
-      fetchJSON('https://api.frankfurter.dev/v1/'+rng+'?base=EUR&symbols=CNY'),
-      fetchJSON('https://api.frankfurter.dev/v1/'+rng+'?base=USD&symbols=CNY'),
+      fetchJSON('https://api.frankfurter.dev/v1/latest?base=EUR&symbols=CNY'),
+      fetchJSON('https://api.frankfurter.dev/v1/latest?base=USD&symbols=CNY'),
       fetchJSON('https://api.frankfurter.dev/v1/latest?base=EUR&symbols=USD')
     ]);
-    const ep=Object.keys(eur.rates).sort().map(k=>[k,eur.rates[k].CNY]);
-    const up=Object.keys(usd.rates).sort().map(k=>[k,usd.rates[k].CNY]);
-    const lastE=ep[ep.length-1],prevE=ep.length>1?ep[ep.length-2]:null;
-    const lastU=up[up.length-1],prevU=up.length>1?up[up.length-2]:null;
-    setRate('v_eurcny','c_eurcny',lastE?lastE[1]:null,prevE?prevE[1]:null);
-    setRate('v_usdcny','c_usdcny',lastU?lastU[1]:null,prevU?prevU[1]:null);
-    const eunow=eu&&eu.rates?eu.rates.USD:null;
-    const euprev=(prevE&&prevU&&prevU[1])?prevE[1]/prevU[1]:null;
-    setRate('v_eurusd','c_eurusd',eunow,euprev);
-    drawChart('chart_eurcny',ep,'#2563eb');
-    drawChart('chart_usdcny',up,'#0d9488');
-    document.getElementById('srcNote').textContent='数据源：Frankfurter（欧洲央行基准价）· 更新于 '+(lastE?lastE[0]:'--');
+    setRate('v_eurcny','c_eurcny',eur.rates.CNY,null);
+    setRate('v_usdcny','c_usdcny',usd.rates.CNY,null);
+    setRate('v_eurusd','c_eurusd',eu.rates.USD,null);
+    drawChart('chart_eurcny',null);drawChart('chart_usdcny',null);
+    document.getElementById('srcNote').textContent='数据源：Frankfurter（欧洲央行基准价）';
   }catch(e){
-    try{
-      const [a,b]=await Promise.all([
-        fetchJSON('https://open.er-api.com/v6/latest/EUR'),
-        fetchJSON('https://open.er-api.com/v6/latest/USD')
-      ]);
-      setRate('v_eurcny','c_eurcny',a.rates.CNY,null);
-      setRate('v_usdcny','c_usdcny',b.rates.CNY,null);
-      setRate('v_eurusd','c_eurusd',a.rates.USD,null);
-      drawChart('chart_eurcny',null);drawChart('chart_usdcny',null);
-      document.getElementById('srcNote').textContent='数据源：ER-API · 更新于 '+(a.time_last_update_utc||'--').slice(0,16);
-    }catch(e2){
-      document.getElementById('errBox').innerHTML='<div class="err">汇率数据加载失败，请检查网络后点击「刷新」重试。</div>';
-    }
+    document.getElementById('errBox').innerHTML='<div class="err">汇率数据加载失败，请检查网络后点击「刷新」重试。</div>';
   }
 }
 loadAll();
