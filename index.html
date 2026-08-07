@@ -97,6 +97,19 @@
   .fgrid{display:grid;grid-template-columns:1fr;gap:0 14px;}
   .calcbar{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 12px;
     font-size:13px;margin-top:12px;color:#1e40af;line-height:1.8;}
+  /* ---------- 核算数据仪表盘（RFQ 蓝底框 Grid 化） ---------- */
+  .calcgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+  .cg-cell{background:#fff;border:1px solid #bfdbfe;border-radius:10px;padding:8px 10px;}
+  .cg-cell .l{font-size:11.5px;color:#6b7280;font-weight:600;}
+  .cg-cell .v{font-size:16px;font-weight:800;color:#1e40af;margin-top:2px;word-break:break-all;}
+  .cg-cell .v small{font-size:11px;color:#6b7280;font-weight:500;}
+  @media (min-width:768px){.calcgrid{grid-template-columns:repeat(3,1fr);}}
+  /* ---------- 产品矩阵升维：Toggle + 双饼图 ---------- */
+  .dm-btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 16px;
+    font-size:12.5px;cursor:pointer;color:var(--sub);font-weight:600;min-height:32px;}
+  .dm-btn.on{background:var(--blue);border-color:var(--blue);color:#fff;}
+  .donut-grid{display:grid;grid-template-columns:1fr;gap:16px;}
+  @media (min-width:768px){.donut-grid{grid-template-columns:1fr 1fr;}}
   /* ---------- 弹窗 ---------- */
   .mask{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:90;display:none;}
   .mask.on{display:block;}
@@ -237,6 +250,7 @@
     <div class="card">
       <h2><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4m8-4v4"/></svg>项目节点排期（OTS / PPAP / SOP）</h2>
       <div class="chart-wrap" id="ganttWrap"></div>
+      <div id="ganttDocs" style="margin-top:10px;"></div>
       <div class="legend">
         <span><i class="dot" style="background:#2563eb"></i>OTS 交样</span>
         <span><i class="dot" style="background:#d97706"></i>PPAP 提交</span>
@@ -245,9 +259,23 @@
     </div>
 
     <div class="card">
-      <h2><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 109 9h-9z"/><path d="M15 2.5A9 9 0 0121.5 9H15z"/></svg>赢单产品矩阵（年化金额占比）</h2>
-      <div class="chart-wrap" id="donutWrap"></div>
-      <div class="legend" id="donutLegend"></div>
+      <h2><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round"><path d="M12 3a9 9 0 109 9h-9z"/><path d="M15 2.5A9 9 0 0121.5 9H15z"/></svg>赢单产品矩阵 & 客户集中度</h2>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button class="dm-btn on" id="dmSales" onclick="setDonutMode('sales')">销售额</button>
+        <button class="dm-btn" id="dmMargin" onclick="setDonutMode('margin')">毛利额</button>
+      </div>
+      <div class="donut-grid">
+        <div>
+          <div class="muted" id="donutTitle" style="margin-bottom:6px;">按品类（年化销售额 EAR）</div>
+          <div class="chart-wrap" id="donutWrap"></div>
+          <div class="legend" id="donutLegend"></div>
+        </div>
+        <div>
+          <div class="muted" style="margin-bottom:6px;">客户集中度（年化 · 大客户依赖风险）</div>
+          <div class="chart-wrap" id="custWrap"></div>
+          <div class="legend" id="custLegend"></div>
+        </div>
+      </div>
       <div id="subcatBars" style="margin-top:14px;"></div>
     </div>
 
@@ -316,6 +344,8 @@ const LS={clients:'wb_allen_clients',rfqs:'wb_allen_rfqs',projects:'wb_allen_pro
 let DB={clients:[],rfqs:[],projects:[],todos:[]};
 
 const STATUSES=['收到询价','核价中','Round 1 提交','技术评审中','Round 2+ 提交','赢单定点','丢单'];
+/* 图纸/文档链接按钮通用图标（内联 SVG） */
+const DOC_ICON='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.5.5l3-3a5 5 0 00-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 00-7.5-.5l-3 3a5 5 0 007 7l1.7-1.7"/></svg>';
 const SEGMENTS=['保持架','汽车零部件','EGC'];
 const SUBCATS={
   '保持架':['DGBB','小TRB','大TRB','特大TRB','CRB','SRB','异型保持架','防尘盖','注塑','机加工','复合机加工','铸铜铸铁'],
@@ -438,10 +468,13 @@ function eavOf(r){
 }
 /* 年均销售额 EAR（RMB）= 单件裸价(RMB) × EAV（不含模具分摊） */
 function annualSalesOf(r){return eavOf(r)*num(r.barePrice);}
-/* 动态阶梯年降：SOP 年 = 对外报价(外币)；SOP+n = 上一年 × (1 - 当年 LTA%)，每年降幅独立 */
+/* 对外裸价(外币) = 单件裸价(RMB) / 报价汇率 —— LTA 年降推演的唯一基准（脱水口径，绝不含模具分摊） */
+function extBarePriceOf(r){const fx=num(r.fxRate);return fx>0?num(r.barePrice)/fx:0;}
+/* 动态阶梯年降（脱水逻辑）：基准 = 对外裸价 = 单件裸价(RMB)/汇率；
+   Y1裸价 = 基准裸价 × (1 - Y1 LTA%)，Y2裸价 = Y1裸价 × (1 - Y2 LTA%)，每年降幅独立 */
 function priceLadder(r){
   const rates=r.ltaRates||[],sop=num(r.sopYear)||new Date().getFullYear();
-  const out=[{year:sop,price:extPriceOf(r)}];
+  const out=[{year:sop,price:extBarePriceOf(r)}];
   rates.forEach((rt,i)=>out.push({year:sop+i+1,price:out[i].price*(1-num(rt)/100)}));
   return out;
 }
@@ -470,16 +503,42 @@ function commCalc(r){
 function rfqIdsOf(p){return p.rfqIds||(p.rfqId?[p.rfqId]:[]);}
 function rfqOfProject(p){const ids=rfqIdsOf(p);return DB.rfqs.find(r=>r.id===ids[0])||null;}
 function rfqsOfProject(p){return rfqIdsOf(p).map(id=>DB.rfqs.find(r=>r.id===id)).filter(Boolean);}
-function projCommSum(p){return rfqsOfProject(p).reduce((s,r)=>{const c=commCalc(r);return s+(c?c.total:0);},0);}
-/* 模具费提成：提成额(RMB) = 模具总费(RMB) × 该零件最终提成比例；
-   状态：有分摊 → 「分摊」；无分摊则按 PPAP 状态：回签=已提，未提交/提交=待提 */
+/* 量产提成总额 = 各零件『按年明细推演』之和（KPI 池 / 项目卡片 / Excel 导出统一口径） */
+function projCommSum(p){return rfqsOfProject(p).reduce((s,r)=>{const cy=commYearsOf(r);return s+(cy?cy.total:0);},0);}
+/* 模具费提成（防重 / 互斥逻辑）：
+   IF 模具分摊数量 > 0（Amortization 分摊模式）→ 模具提成额 = 0
+      （模具费已分摊进单价随量产逐步回收，不得再单独计提提成，防止双重计算）；
+   ELSE（Lump Sum 一次性收取）→ 模具提成额 = 模具总费(RMB) × 该零件最终提成比例，
+      状态按 PPAP：PSW回签=已提，未提交/提交=待提 */
 function moldCommOf(r,ppapStatus){
   if(!num(r.moldFee))return null;
+  if(num(r.moldQty)>0)return {mode:'分摊',fee:num(r.moldFee),amt:0};
   const cc=commCalc(r),amt=num(r.moldFee)*(cc?cc.rate:0);
-  if(num(r.moldQty)>0)return {mode:'分摊',fee:num(r.moldFee),amt:amt};
   return {mode:ppapStatus==='PSW回签'?'已提':'待提',fee:num(r.moldFee),amt:amt};
 }
 function moldCommSum(p){return rfqsOfProject(p).reduce((s,r)=>{const m=moldCommOf(r,p.ppapStatus);return s+(m?m.amt:0);},0);}
+/* 量产提成『按年明细推演』（核心算力升级）：
+   第 N 年提成额(RMB) = (第 N 年对外裸价(外币) × 报价汇率 − 制造成本RMB) × 最终提成比例 × 第 N 年实际需求量
+   · 第 N 年裸价：由 priceLadder 按 LTA 逐年动态推演（脱水口径，不含模具分摊）；超出推演年数沿用最后一年裸价
+   · 第 N 年需求量：优先取阶梯需求 demands 对应年份，为空则取 EAV
+   · 提成期从 SOP 年份起算，年数 = commCalc(r).years（保持架 1 年 / 其他 3 年） */
+function commYearsOf(r){
+  const cc=commCalc(r);if(!cc)return null;
+  const fx=num(r.fxRate)||1,cost=num(r.cost)*0.87,sop=num(r.sopYear)||new Date().getFullYear();
+  const ladder=priceLadder(r);
+  const byYear={};ladder.forEach(p=>{byYear[p.year]=p.price;});
+  const lastPrice=ladder.length?ladder[ladder.length-1].price:extBarePriceOf(r);
+  const rows=[];let total=0;
+  for(let i=0;i<cc.years;i++){
+    const y=sop+i;
+    const bareFx=byYear[y]!=null?byYear[y]:lastPrice;
+    const qty=num((r.demands||{})[y])>0?num(r.demands[y]):cc.eav;
+    const amt=(bareFx*fx-cost)*cc.rate*qty;
+    rows.push({year:y,label:'Y'+(i+1),qty:qty,bareFx:bareFx,amt:amt});
+    total+=amt;
+  }
+  return {rows:rows,total:total,cc:cc};
+}
 
 /* ============================================================
    渲染框架
@@ -572,6 +631,11 @@ function renderAttack(){
 /* ---------- Gantt ---------- */
 function renderGantt(){
   const projs=DB.projects.filter(p=>p.status==='进行中');
+  /* 首屏图纸/文档直达按钮（项目含 docUrl 时渲染，新标签页打开） */
+  document.getElementById('ganttDocs').innerHTML=projs.filter(p=>p.docUrl).map(p=>{
+    const r=rfqOfProject(p);
+    return '<a class="btn btn-g btn-sm" href="'+esc(p.docUrl)+'" target="_blank" rel="noopener" style="text-decoration:none;margin:0 8px 8px 0;">'+DOC_ICON+'查看图纸/文档 · '+esc(r?r.code:'项目')+'</a>';
+  }).join('');
   if(!projs.length){document.getElementById('ganttWrap').innerHTML='<div class="empty">暂无进行中项目节点。</div>';return;}
   const t=new Date(todayStr()+'T00:00:00');
   const start=new Date(t);start.setMonth(start.getMonth()-1);start.setDate(1);
@@ -603,42 +667,77 @@ function renderGantt(){
   document.getElementById('ganttWrap').innerHTML=s+'</svg>';
 }
 
-/* ---------- 产品矩阵 Donut + 细分条形 ---------- */
-function renderDonut(){
-  const won=DB.rfqs.filter(r=>r.status==='赢单定点');
-  const agg={};let total=0;
-  won.forEach(r=>{const v=annualSalesOf(r);agg[r.segment]=(agg[r.segment]||0)+v;total+=v;});
-  if(!total){document.getElementById('donutWrap').innerHTML='<div class="empty">暂无赢单数据。</div>';
-    document.getElementById('donutLegend').innerHTML='';document.getElementById('subcatBars').innerHTML='';return;}
+/* ---------- 产品矩阵 Donut + 客户集中度 + 细分胜率 ---------- */
+let donutMode='sales'; /* sales=销售额(EAR) / margin=毛利额 */
+function setDonutMode(m){donutMode=m;renderDonut();}
+/* 当前口径的单 RFQ 年化金额：毛利额 = (单件裸价RMB − 制造成本RMB) × EAV */
+function metricOf(r){return donutMode==='margin'?(num(r.barePrice)-num(r.cost)*0.87)*eavOf(r):annualSalesOf(r);}
+/* 品类/细分历史胜率 = 已定点数 / (已定点数 + 已丢单数) */
+function winRateTxt(matchFn){
+  const won=DB.rfqs.filter(r=>r.status==='赢单定点'&&matchFn(r)).length;
+  const lost=DB.rfqs.filter(r=>r.status==='丢单'&&matchFn(r)).length;
+  const den=won+lost;
+  return den?'胜率 '+Math.round(won/den*100)+'%（'+won+'胜'+lost+'负）':'胜率 --';
+}
+/* 通用环形图绘制：返回 {svg, items:[{k,v}]} */
+function donutSVG(agg,colorOf,centerTop){
+  const total=Object.values(agg).reduce((a,b)=>a+b,0);
+  if(!total)return {svg:'<div class="empty">暂无赢单数据。</div>',items:[]};
   const cx=110,cy=110,R=86,r=52;let a0=-Math.PI/2;let s='<svg viewBox="0 0 340 220" style="max-width:420px;width:100%">';
-  const legs=[];
+  const items=[];
   Object.keys(agg).forEach(k=>{
     const frac=agg[k]/total,a1=a0+frac*Math.PI*2,large=frac>0.5?1:0;
     if(frac>0.9999){
-      /* 单一板块占 100% 时弧线起终点重合会被浏览器吞掉，改用整圆环 */
-      s+='<circle cx="'+cx+'" cy="'+cy+'" r="'+((R+r)/2)+'" fill="none" stroke="'+SEG_COLOR[k]+'" stroke-width="'+(R-r)+'"/>'+
+      /* 单一项占 100% 时弧线起终点重合会被浏览器吞掉，改用整圆环 */
+      s+='<circle cx="'+cx+'" cy="'+cy+'" r="'+((R+r)/2)+'" fill="none" stroke="'+colorOf(k)+'" stroke-width="'+(R-r)+'"/>'+
          '<text x="'+(cx+R+14)+'" y="'+cy+'" font-size="11" fill="#374151">100%</text>';
     }else{
       const x0=cx+R*Math.cos(a0),y0=cy+R*Math.sin(a0),x1=cx+R*Math.cos(a1),y1=cy+R*Math.sin(a1);
       const xi1=cx+r*Math.cos(a1),yi1=cy+r*Math.sin(a1),xi0=cx+r*Math.cos(a0),yi0=cy+r*Math.sin(a0);
-      s+='<path d="M'+x0+' '+y0+' A'+R+' '+R+' 0 '+large+' 1 '+x1+' '+y1+' L'+xi1+' '+yi1+' A'+r+' '+r+' 0 '+large+' 0 '+xi0+' '+yi0+' Z" fill="'+SEG_COLOR[k]+'"/>';
+      s+='<path d="M'+x0+' '+y0+' A'+R+' '+R+' 0 '+large+' 1 '+x1+' '+y1+' L'+xi1+' '+yi1+' A'+r+' '+r+' 0 '+large+' 0 '+xi0+' '+yi0+' Z" fill="'+colorOf(k)+'"/>';
       const mid=(a0+a1)/2,lx=cx+(R+14)*Math.cos(mid),ly=cy+(R+14)*Math.sin(mid);
       s+='<text x="'+lx+'" y="'+ly+'" font-size="11" fill="#374151" text-anchor="'+(Math.cos(mid)>0.2?'start':Math.cos(mid)<-0.2?'end':'middle')+'">'+(frac*100).toFixed(0)+'%</text>';
     }
-    legs.push('<span><i class="dot" style="background:'+SEG_COLOR[k]+'"></i>'+k+' · '+fmtRMB(agg[k])+'</span>');
+    items.push({k:k,v:agg[k]});
     a0=a1;
   });
-  s+='<text x="'+cx+'" y="'+(cy-2)+'" font-size="11" fill="#6b7280" text-anchor="middle">赢单年化</text>'+
+  s+='<text x="'+cx+'" y="'+(cy-2)+'" font-size="11" fill="#6b7280" text-anchor="middle">'+centerTop+'</text>'+
      '<text x="'+cx+'" y="'+(cy+16)+'" font-size="14" font-weight="700" fill="#1f2937" text-anchor="middle">'+fmtRMB(total)+'</text></svg>';
-  document.getElementById('donutWrap').innerHTML=s;
-  document.getElementById('donutLegend').innerHTML=legs.join('');
-  const sub={};won.forEach(r=>{const v=annualSalesOf(r);const k=r.segment+'-'+r.subcat;sub[k]=(sub[k]||0)+v;});
-  const max=Math.max.apply(null,Object.values(sub));
-  document.getElementById('subcatBars').innerHTML='<div class="muted" style="margin-bottom:8px;">按产品细分（年化 ¥）</div>'+
-    Object.keys(sub).sort((a,b)=>sub[b]-sub[a]).map(k=>{
-      const seg=k.split('-')[0];
-      return '<div style="margin-bottom:8px;"><div style="font-size:12.5px;margin-bottom:3px;">'+esc(k)+' <b style="float:right">'+fmtRMB(sub[k])+'</b></div>'+
-        '<div style="background:#f1f5f9;border-radius:6px;height:12px;"><div style="width:'+(sub[k]/max*100).toFixed(1)+'%;height:100%;border-radius:6px;background:'+SEG_COLOR[seg]+'"></div></div></div>';
+  return {svg:s,items:items};
+}
+function renderDonut(){
+  const won=DB.rfqs.filter(r=>r.status==='赢单定点');
+  const isM=donutMode==='margin';
+  document.getElementById('dmSales').classList.toggle('on',!isM);
+  document.getElementById('dmMargin').classList.toggle('on',isM);
+  document.getElementById('donutTitle').textContent=isM?'按品类（年化毛利额）':'按品类（年化销售额 EAR）';
+  /* 饼图 1：品类矩阵（附品类胜率） */
+  const agg={};won.forEach(r=>{agg[r.segment]=(agg[r.segment]||0)+metricOf(r);});
+  const d1=donutSVG(agg,function(k){return SEG_COLOR[k];},isM?'赢单年化毛利':'赢单年化销售额');
+  document.getElementById('donutWrap').innerHTML=d1.svg;
+  document.getElementById('donutLegend').innerHTML=d1.items.map(it=>
+    '<span><i class="dot" style="background:'+SEG_COLOR[it.k]+'"></i>'+esc(it.k)+' · '+fmtRMB(it.v)+
+    ' · <b style="color:var(--purple)">'+winRateTxt(function(r){return r.segment===it.k;})+'</b></span>').join('');
+  /* 饼图 2：客户集中度（大客户依赖风险） */
+  const CUST_COLORS=['#2563eb','#d97706','#0d9488','#7c3aed','#dc2626','#16a34a','#db2777','#0891b2'];
+  const cagg={};won.forEach(r=>{const c=clientOf(r);const k=c?c.code:'未关联';cagg[k]=(cagg[k]||0)+metricOf(r);});
+  const cColor={};Object.keys(cagg).forEach((k,i)=>{cColor[k]=CUST_COLORS[i%CUST_COLORS.length];});
+  const d2=donutSVG(cagg,function(k){return cColor[k];},'客户集中度');
+  document.getElementById('custWrap').innerHTML=d2.svg;
+  document.getElementById('custLegend').innerHTML=d2.items.map(it=>
+    '<span><i class="dot" style="background:'+cColor[it.k]+'"></i>'+esc(it.k)+' · '+fmtRMB(it.v)+'</span>').join('');
+  /* 细分条形（附细分胜率） */
+  const sub={};won.forEach(r=>{const k=r.segment+'-'+r.subcat;sub[k]=(sub[k]||0)+metricOf(r);});
+  const subKeys=Object.keys(sub);
+  if(!subKeys.length){document.getElementById('subcatBars').innerHTML='';return;}
+  const max=Math.max.apply(null,subKeys.map(k=>sub[k]));
+  document.getElementById('subcatBars').innerHTML='<div class="muted" style="margin-bottom:8px;">按产品细分（年化'+(isM?'毛利额':'销售额')+' ¥）· 附历史胜率</div>'+
+    subKeys.sort((a,b)=>sub[b]-sub[a]).map(k=>{
+      const seg=k.split('-')[0],subc=k.slice(seg.length+1);
+      return '<div style="margin-bottom:8px;"><div style="font-size:12.5px;margin-bottom:3px;">'+esc(k)+
+        ' <span style="color:var(--purple);font-weight:600;">'+winRateTxt(function(r){return r.segment===seg&&r.subcat===subc;})+'</span>'+
+        '<b style="float:right">'+fmtRMB(sub[k])+'</b></div>'+
+        '<div style="background:#f1f5f9;border-radius:6px;height:12px;"><div style="width:'+(max>0?(sub[k]/max*100).toFixed(1):0)+'%;height:100%;border-radius:6px;background:'+SEG_COLOR[seg]+'"></div></div></div>';
     }).join('');
 }
 
@@ -695,7 +794,8 @@ function renderRFQList(){
       '<div><span>年均销售额 EAR</span><b style="color:var(--blue-d)">'+fmtRMB(annualSalesOf(r))+'</b></div>'+
       '<div><span>核算毛利率</span><b style="color:'+(cc.margin<0.3?'var(--red)':'var(--green)')+'">'+(cc.margin*100).toFixed(1)+'%</b></div>'+
       '<div><span>若赢单·提成比例</span><b>'+(cc.rate*100).toFixed(2)+'%</b></div></div>'+
-      ((r.ltaRates||[]).length?'<div class="meta" style="margin-top:6px;"><span style="color:var(--orange)">年降 '+r.ltaRates.map(x=>esc(x)+'%').join('/')+'：</span><span>'+priceLadder(r).map(p=>p.year+' '+fmt(p.price,3)).join(' → ')+' '+esc(r.currency)+'</span></div>':'')+
+      ((r.ltaRates||[]).length?'<div class="meta" style="margin-top:6px;"><span style="color:var(--orange)">对外裸价年降轨迹（LTA '+r.ltaRates.map(x=>esc(x)+'%').join('/')+'）：</span><span>'+priceLadder(r).map(p=>p.year+'年 '+fmt(p.price,3)).join(' ➔ ')+' '+esc(r.currency)+'</span></div>'+
+      '<div class="meta" style="margin-top:2px;"><span style="color:var(--red);font-size:11.5px;">(注：LTA仅针对单件裸价生效。模具分摊额在达到【分摊数量】后将自动从总单价中剔除)</span></div>':'')+
       '<div class="ops"><button class="btn btn-g btn-sm" onclick="openRFQForm(\''+r.id+'\')">编辑 / Rev 历史</button>'+
       '<button class="btn btn-g btn-sm" onclick="advanceRFQ(\''+r.id+'\')">推进状态 →</button>'+
       (r.status==='赢单定点'&&!linked?'<button class="btn btn-p btn-sm" onclick="openProjectForm(null,\''+r.id+'\')">转入项目库</button>':'')+
@@ -849,13 +949,21 @@ function previewCalc(){
   try{
     const r=readRFQForm();const cc=commCalc(r);const fx=num(r.fxRate)||1;
     const lad=(r.ltaRates||[]).length
-      ?'<br>对外报价年降轨迹：'+priceLadder(r).map((p,i)=>(i===0?'<b>':'')+p.year+'年 '+fmt(p.price,3)+(i===0?'</b>':'')).join(' → ')+' '+esc(r.currency)
+      ?'<div style="margin-top:10px;">对外裸价年降轨迹：'+priceLadder(r).map((p,i)=>(i===0?'<b>':'')+p.year+'年 '+fmt(p.price,3)+(i===0?'</b>':'')).join(' ➔ ')+' '+esc(r.currency)+
+       '<br><span style="color:#dc2626;font-size:12px;">(注：LTA仅针对单件裸价生效。模具分摊额在达到【分摊数量】后将自动从总单价中剔除)</span></div>'
       :'';
+    const cells=[
+      ['EAV 年均需求',fmt(cc.eav,0)+' <small>件</small>'],
+      ['对外裸价(外币)',fmt(extBarePriceOf(r),3)+' <small>'+esc(r.currency)+' · 裸价÷汇率</small>'],
+      ['对外报价(外币·含分摊)',fmt(extPriceOf(r),3)+' <small>'+esc(r.currency)+' · 分摊 ¥'+fmt(amortOf(r),3)+'</small>'],
+      ['制造成本','¥'+fmt(num(r.cost)*0.87)+' <small>成本×0.87</small>'],
+      ['核算毛利率',(cc.margin*100).toFixed(1)+'% <small>不含模具分摊</small>'],
+      ['年均销售额 EAR',fmtRMB(annualSalesOf(r))+' <small>不含模具</small>'],
+      ['最终提成比例',(cc.rate*100).toFixed(2)+'% <small>'+(cc.base*100).toFixed(1)+'%×'+cc.mCoef+'×'+cc.cCoef+'</small>'],
+      ['对外模具费(外币)',fmt(num(r.moldFee)/fx)+' <small>'+esc(r.currency)+'</small>']
+    ];
     document.getElementById('calcBar').innerHTML=
-      '对外裸价(外币)：<b>'+fmt(num(r.barePrice)/fx,3)+' '+esc(r.currency)+'</b>（裸价RMB÷汇率）　|　对外模具费(外币)：<b>'+fmt(num(r.moldFee)/fx)+' '+esc(r.currency)+'</b><br>'+
-      'EAV 年均需求：<b>'+fmt(cc.eav,0)+'</b> 件　|　单件分摊额：<b>¥'+fmt(amortOf(r),3)+'</b>　|　对外报价(外币)：<b>'+fmt(extPriceOf(r),3)+' '+esc(r.currency)+'</b>（裸价+分摊）<br>'+
-      '制造成本：<b>¥'+fmt(num(r.cost)*0.87)+'</b>（成本×0.87）　|　核算毛利率：<b>'+(cc.margin*100).toFixed(1)+'%</b>（不含模具分摊）　|　年均销售额 EAR：<b>'+fmtRMB(annualSalesOf(r))+'</b><br>'+
-      '基准点数 '+(cc.base*100).toFixed(1)+'% × 毛利系数 '+cc.mCoef+' × 客户系数 '+cc.cCoef+' = 提成比例 <b>'+(cc.rate*100).toFixed(2)+'%</b>'+lad;
+      '<div class="calcgrid">'+cells.map(c=>'<div class="cg-cell"><div class="l">'+c[0]+'</div><div class="v">'+c[1]+'</div></div>').join('')+'</div>'+lad;
   }catch(e){}
 }
 function saveRFQ(id){
@@ -933,6 +1041,13 @@ function renderProjList(){
     const multi=rs.length>1;
     const total=projCommSum(p),moldAmt=moldCommSum(p),grand=total+num(p.oneTimeBonus)+moldAmt;
     const eavSum=rs.reduce((s,x)=>s+eavOf(x),0),salesSum=rs.reduce((s,x)=>s+annualSalesOf(x),0);
+    /* 量产提成按年明细：逐年裸价(LTA推演) × 汇率 − 制造成本，再乘当年需求量与提成比例 */
+    const commDetail=rs.map(x=>{
+      const cy=commYearsOf(x);if(!cy)return '';
+      return '<div style="margin-top:4px;"><span style="color:var(--orange);font-weight:600;">'+esc(x.code)+' 按年提成明细（提成期 '+cy.cc.years+' 年）：</span>'+
+        cy.rows.map(w=>'<span style="display:inline-block;margin:2px 12px 2px 0;">'+w.year+' ('+w.label+')：<b>'+fmtRMB(w.amt)+'</b>（销量 '+fmt(w.qty,0)+' · 裸价 '+fmt(w.bareFx,3)+' '+esc(x.currency)+'）</span>').join('')+
+        '<span style="display:inline-block;font-weight:700;color:var(--red);">加总 '+fmtRMB(cy.total)+'</span></div>';
+    }).join('');
     return '<div class="item"><div class="head"><b>'+esc(multi?r.project:r.code+' · '+r.project)+'</b>'+
       '<span class="tag '+(p.status==='进行中'?'green':'blue')+'">'+esc(p.status)+'</span>'+
       (multi?'<span class="tag purple">'+rs.length+' 个零件合并</span>':'')+
@@ -942,7 +1057,8 @@ function renderProjList(){
       '<div class="meta" style="margin-top:4px;"><span>OTS '+esc(p.otsDate||'-')+'</span><span>PPAP '+esc(p.ppapDate||'-')+'</span><span>SOP '+esc(p.sopDate||'-')+'（提成起算）</span></div>'+
       '<div class="meta" style="margin-top:6px;"><span class="tag '+(p.ppapStatus==='PSW回签'?'green':p.ppapStatus==='提交'?'orange':'blue')+'">PPAP：'+esc(p.ppapStatus||'未提交')+(p.ppapStatus==='提交'&&p.ppapSubmit?'（'+esc(p.ppapSubmit)+'）':'')+'</span>'+
       rs.map(x=>{const m=moldCommOf(x,p.ppapStatus);if(!m)return '';
-        return '<span class="tag '+(m.mode==='已提'?'green':m.mode==='待提'?'orange':'blue')+'">模具 '+(x.partNo?esc(x.partNo)+' ':'')+fmtRMB(m.fee)+' · '+m.mode+' · 提成 '+fmtRMB(m.amt)+'</span>';}).join('')+'</div>'+
+        return '<span class="tag '+(m.mode==='已提'?'green':m.mode==='待提'?'orange':'blue')+'">模具 '+(x.partNo?esc(x.partNo)+' ':'')+fmtRMB(m.fee)+' · '+m.mode+
+          (m.mode==='分摊'?' · 提成 <b>¥0</b>（分摊模式无单独提成）':' · 提成 '+fmtRMB(m.amt))+'</span>';}).join('')+'</div>'+
       '<div class="nums">'+
       '<div><span>EAV 年均'+(multi?'合计':'')+'</span><b>'+fmt(eavSum,0)+' 件</b></div>'+
       '<div><span>年均销售额'+(multi?'合计':'')+'</span><b style="color:var(--blue-d)">'+fmtRMB(salesSum)+'</b></div>'+
@@ -951,9 +1067,13 @@ function renderProjList(){
       '<div><span>提成期限 / 截止</span><b>'+cc.years+' 年<span style="font-size:11px;color:var(--sub)">（'+(p.sopDate?addYears(p.sopDate,cc.years):'-')+'）</span></b></div>'+
       '<div><span>量产提成总额'+(multi?'（合计）':'')+'</span><b style="color:var(--orange)">'+fmtRMB(total)+'</b></div>'+
       '<div><span>一次性定点提成</span><b>'+fmtRMB(num(p.oneTimeBonus))+'</b></div>'+
-      '<div><span>模具提成额'+(multi?'（合计）':'')+'</span><b>'+fmtRMB(moldAmt)+'</b></div>'+
+      '<div><span>模具提成额'+(multi?'（合计）':'')+'</span><b>'+(moldAmt===0&&rs.some(x=>num(x.moldFee)>0&&num(x.moldQty)>0)
+        ?'¥0 <span style="font-size:11px;color:var(--sub);font-weight:500;">(分摊模式无单独提成)</span>'
+        :fmtRMB(moldAmt))+'</b></div>'+
       '<div><span>本项目提成合计</span><b style="color:var(--red)">'+fmtRMB(grand)+'</b></div></div>'+
-      '<div class="ops"><button class="btn btn-g btn-sm" onclick="openProjectForm(\''+p.id+'\')">编辑</button>'+
+      (commDetail?'<div class="meta" style="margin-top:8px;display:block;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:8px 12px;">'+commDetail+'</div>':'')+
+      '<div class="ops">'+(p.docUrl?'<a class="btn btn-p btn-sm" href="'+esc(p.docUrl)+'" target="_blank" rel="noopener" style="text-decoration:none;">'+DOC_ICON+'查看图纸/文档</a>':'')+
+      '<button class="btn btn-g btn-sm" onclick="openProjectForm(\''+p.id+'\')">编辑</button>'+
       '<button class="btn btn-g btn-sm" onclick="toggleProjStatus(\''+p.id+'\')">'+(p.status==='进行中'?'标记结束':'重新激活')+'</button>'+
       '<button class="btn btn-r btn-sm" onclick="delProject(\''+p.id+'\')">删除</button></div></div>';
   }).join(''):'<div class="card"><div class="empty">'+(q?'没有匹配的项目，换个关键词试试。':'暂无项目。在 RFQ 状态推进到「赢单定点」后，点「+ 赢单转项目」。')+'</div></div>';
@@ -975,6 +1095,7 @@ function openProjectForm(id,rfqId){
   '<div><label class="f">客户零件号 Customer P/N</label><input type="text" id="p_custPN" value="'+esc(v('custPN'))+'"></div>'+
   '<div><label class="f">内部工程号 Internal P/N</label><input type="text" id="p_internalPN" value="'+esc(v('internalPN'))+'"></div>'+
   '<div><label class="f">SAP 物料号 SAP Code</label><input type="text" id="p_sapCode" value="'+esc(v('sapCode'))+'"></div>'+
+  '<div style="grid-column:1/-1;"><label class="f">工程文档/图纸 URL（云盘链接，选填）</label><input type="text" id="p_docUrl" value="'+esc(v('docUrl'))+'" placeholder="https://...（金山文档 / 腾讯文档 / 企业网盘直链）"></div>'+
   '<div><label class="f">一次性定点提成（RMB，手动）</label><input type="number" id="p_oneTime" value="'+esc(v('oneTimeBonus'))+'"></div>'+
   '<div><label class="f">OTS 计划交样日</label><input type="date" id="p_ots" value="'+esc(v('otsDate'))+'"></div>'+
   '<div><label class="f">PPAP 计划提交日</label><input type="date" id="p_ppap" value="'+esc(v('ppapDate'))+'"></div>'+
@@ -990,15 +1111,24 @@ function openProjectForm(id,rfqId){
 function previewProjCalc(){
   const r=DB.rfqs.find(x=>x.id===document.getElementById('p_rfq').value);
   const cc=commCalc(r);if(!cc)return;
+  const cy=commYearsOf(r);
+  const cells=[
+    ['客户类型',esc(cc.ctype)+' <small>系数 ×'+cc.cCoef+'</small>'],
+    ['EAV 年均需求',fmt(cc.eav,0)+' <small>件</small>'],
+    ['对外报价(外币)',fmt(extPriceOf(r),3)+' <small>'+esc(r.currency)+' · 裸价 ¥'+fmt(r.barePrice,3)+' @ '+r.fxRate+'</small>'],
+    ['核算毛利率',(cc.margin*100).toFixed(1)+'% <small>'+(cc.margin<0.3?'&lt;30% · 对赌系数 0.5':'≥30% · 系数 1')+'</small>'],
+    ['最终提成比例',(cc.rate*100).toFixed(2)+'% <small>'+(cc.base*100).toFixed(1)+'%×'+cc.mCoef+'×'+cc.cCoef+'</small>'],
+    ['提成期限',cc.years+' 年 <small>SOP 起算</small>'],
+    ['量产提成',fmtRMB(cy?cy.total:0)+' <small>按年明细推演</small>']
+  ];
   document.getElementById('projCalcBar').innerHTML=
-    '客户类型 <b>'+esc(cc.ctype)+'</b>　|　EAV <b>'+fmt(cc.eav,0)+'</b> 件　|　对外报价 <b>'+fmt(extPriceOf(r),3)+' '+esc(r.currency)+'</b>（裸价 ¥'+fmt(r.barePrice,3)+' @ '+r.fxRate+'）<br>'+
-    '毛利率 <b>'+(cc.margin*100).toFixed(1)+'%</b>（'+(cc.margin<0.3?'&lt;30%，对赌系数 0.5':'≥30%，系数 1')+'）　|　提成比例 <b>'+(cc.rate*100).toFixed(2)+'%</b>　|　期限 <b>'+cc.years+' 年</b>　|　量产提成 <b>'+fmtRMB(cc.total)+'</b>';
+    '<div class="calcgrid">'+cells.map(c=>'<div class="cg-cell"><div class="l">'+c[0]+'</div><div class="v">'+c[1]+'</div></div>').join('')+'</div>';
 }
 function saveProject(id){
   const g=i=>document.getElementById(i);
   const rfqId=g('p_rfq').value;
   const data={custPN:g('p_custPN').value.trim(),internalPN:g('p_internalPN').value.trim(),
-    sapCode:g('p_sapCode').value.trim(),oneTimeBonus:num(g('p_oneTime').value),
+    sapCode:g('p_sapCode').value.trim(),docUrl:g('p_docUrl').value.trim(),oneTimeBonus:num(g('p_oneTime').value),
     otsDate:g('p_ots').value,ppapDate:g('p_ppap').value,sopDate:g('p_sop').value,
     ppapStatus:g('p_ppapStatus').value,ppapSubmit:g('p_ppapSubmit').value};
   if(id){Object.assign(DB.projects.find(x=>x.id===id),data);closeModal();save();return;}
@@ -1107,7 +1237,7 @@ function exportProjCSV(){
     const rs=rfqsOfProject(p),r0=rs[0],cc0=commCalc(r0);
     const total=projCommSum(p);
     const eavSum=rs.reduce((s,x)=>s+eavOf(x),0),salesSum=rs.reduce((s,x)=>s+annualSalesOf(x),0);
-    const moldStr=rs.map(x=>{const m=moldCommOf(x,p.ppapStatus);return m?(x.partNo||x.code)+':'+m.mode+' '+Math.round(m.fee):'';}).filter(Boolean).join('; ');
+    const moldStr=rs.map(x=>{const m=moldCommOf(x,p.ppapStatus);return m?(x.partNo||x.code)+':'+m.mode+' '+Math.round(m.fee)+(m.mode==='分摊'?' 提成¥0(分摊模式无单独提成)':' 提成'+Math.round(m.amt)):'';}).filter(Boolean).join('; ');
     return [rs.map(x=>x.code).join('; '),r0?r0.project:'',rs.map(x=>x.partNo||'').filter(Boolean).join('; '),
       p.custPN||'',p.internalPN||'',p.sapCode||'',p.otsDate||'',p.ppapDate||'',p.sopDate||'',
       p.ppapStatus||'未提交',p.ppapSubmit||'',moldStr,
