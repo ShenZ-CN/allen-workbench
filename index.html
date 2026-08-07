@@ -123,8 +123,20 @@
   .chk:hover{border-color:var(--green);}
   .todo-add{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:12px;}
   .todo-add .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
-  /* ---------- 汇率 ---------- */
-  .fx-frame{width:100%;height:340px;border:1px solid var(--line);border-radius:12px;background:#fff;}
+  /* ---------- 汇率面板（内联，无 iframe） ---------- */
+  .fx-rates{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .fx-card{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:linear-gradient(135deg,#f8fafc,#eef4ff);}
+  .fx-card .pair{font-size:12px;color:var(--sub);font-weight:600;}
+  .fx-card .val{font-size:22px;font-weight:800;color:var(--blue-d);margin-top:2px;}
+  .fx-card .chg{font-size:11px;margin-top:2px;font-weight:600;}
+  .fx-up{color:var(--red);}.fx-down{color:var(--green);}.fx-flat{color:#9ca3af;}
+  .fx-charts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}
+  .fx-box{border:1px solid var(--line);border-radius:12px;padding:8px 10px;}
+  .fx-box .t{font-size:12px;color:var(--sub);font-weight:600;margin-bottom:4px;}
+  .fx-foot{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:11px;color:#9ca3af;}
+  .fx-btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:4px 12px;font-size:12px;cursor:pointer;color:var(--blue);font-weight:600;min-height:30px;}
+  .fx-btn:hover{background:#eff6ff;}
+  @media (max-width:640px){.fx-rates{grid-template-columns:1fr 1fr;}.fx-charts{grid-template-columns:1fr;}.fx-card .val{font-size:19px;}}
   /* ---------- 图表 ---------- */
   .chart-wrap{overflow-x:auto;}
   .legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;margin-top:10px;}
@@ -201,8 +213,20 @@
 
     <div class="card">
       <h2><svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2" stroke-linecap="round"><path d="M3 17l6-6 4 4 8-8m0 0h-5m5 0v5"/></svg>实时汇率 EUR / USD</h2>
-      <iframe class="fx-frame" src="fx.html" title="实时汇率" loading="lazy"></iframe>
-      <div class="muted" style="margin-top:6px;">汇率数据来自 Frankfurter（欧洲央行基准价），需联网加载；其余功能离线可用。</div>
+      <div class="fx-rates">
+        <div class="fx-card"><div class="pair">欧元 / 人民币 EUR/CNY</div><div class="val" id="v_eurcny">--</div><div class="chg flat" id="c_eurcny"></div></div>
+        <div class="fx-card"><div class="pair">美元 / 人民币 USD/CNY</div><div class="val" id="v_usdcny">--</div><div class="chg flat" id="c_usdcny"></div></div>
+        <div class="fx-card"><div class="pair">欧元 / 美元 EUR/USD</div><div class="val" id="v_eurusd">--</div><div class="chg flat" id="c_eurusd"></div></div>
+      </div>
+      <div class="fx-charts">
+        <div class="fx-box"><div class="t">EUR/CNY 近 6 个月</div><div id="chart_eurcny"></div></div>
+        <div class="fx-box"><div class="t">USD/CNY 近 6 个月</div><div id="chart_usdcny"></div></div>
+      </div>
+      <div class="fx-foot">
+        <span id="fxSrc">汇率数据源：currency-api（jsDelivr CDN）</span>
+        <button class="fx-btn" onclick="loadFX()">刷新</button>
+      </div>
+      <div id="fxErr"></div>
     </div>
 
     <div class="card">
@@ -1077,6 +1101,76 @@ function clearAll(){
 function openModal(html){document.getElementById('modalBox').innerHTML=html;
   document.getElementById('mask').classList.add('on');document.getElementById('modal').classList.add('on');}
 function closeModal(){document.getElementById('mask').classList.remove('on');document.getElementById('modal').classList.remove('on');}
+
+/* ============================================================
+   实时汇率（内联面板，jsDelivr CDN 数据源，CORS 安全）
+============================================================ */
+async function fxFetch(url){
+  const ctl=new AbortController();const to=setTimeout(()=>ctl.abort(),6000);
+  try{const r=await fetch(url,{signal:ctl.signal});if(!r.ok)throw new Error(r.status);return await r.json();}
+  finally{clearTimeout(to);}
+}
+function fxSetRate(id,val){
+  const el=document.getElementById(id);
+  if(el)el.textContent=val==null?'--':Number(val).toFixed(4);
+}
+function fxDrawChart(elId,points,color){
+  const el=document.getElementById(elId);if(!el)return;
+  if(!points||points.length<2){el.innerHTML='<div style="font-size:11px;color:#9ca3af;padding:8px 0;">历史走势暂不可用</div>';return;}
+  const W=560,H=100,P=6;
+  const vals=points.map(p=>p[1]),min=Math.min.apply(null,vals),max=Math.max.apply(null,vals),span=(max-min)||1;
+  const X=i=>P+i/(points.length-1)*(W-2*P);
+  const Y=v=>H-P-(v-min)/span*(H-2*P);
+  let line='',area='M'+X(0)+' '+Y(vals[0]);
+  points.forEach((p,i)=>{line+=(i===0?'M':'L')+X(i).toFixed(1)+' '+Y(p[1]).toFixed(1)+' ';area+=' L'+X(i).toFixed(1)+' '+Y(p[1]).toFixed(1);});
+  area+=' L'+X(points.length-1).toFixed(1)+' '+(H-P)+' L'+X(0)+' '+(H-P)+' Z';
+  el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;display:block">'+
+    '<path d="'+area+'" fill="'+color+'18"/>'+
+    '<path d="'+line+'" fill="none" stroke="'+color+'" stroke-width="2"/>'+
+    '<circle cx="'+X(points.length-1)+'" cy="'+Y(vals[vals.length-1])+'" r="3.5" fill="'+color+'"/>'+
+    '<text x="'+P+'" y="'+(P+9)+'" font-size="10" fill="#9ca3af">高 '+max.toFixed(3)+'</text>'+
+    '<text x="'+P+'" y="'+(H-2)+'" font-size="10" fill="#9ca3af">低 '+min.toFixed(3)+'</text></svg>';
+}
+async function loadFX(){
+  const err=document.getElementById('fxErr');if(err)err.innerHTML='';
+  try{
+    const [eurT,usdT]=await Promise.all([
+      fxFetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/eur.json'),
+      fxFetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json')
+    ]);
+    fxSetRate('v_eurcny',eurT.eur.cny);
+    fxSetRate('v_usdcny',usdT.usd.cny);
+    fxSetRate('v_eurusd',eurT.eur.usd);
+    const src=document.getElementById('fxSrc');if(src)src.textContent='数据源：currency-api（jsDelivr CDN）· 更新于 '+(eurT.date||'--');
+    /* 历史走势尝试 frankfurter，失败仅隐藏走势图 */
+    try{
+      const today=new Date(),d180=new Date(today.getTime()-183*86400000);
+      const fD=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      const rng=fD(d180)+'..'+fD(today);
+      const [eur,usd]=await Promise.all([
+        fxFetch('https://api.frankfurter.dev/v1/'+rng+'?base=EUR&symbols=CNY'),
+        fxFetch('https://api.frankfurter.dev/v1/'+rng+'?base=USD&symbols=CNY')
+      ]);
+      fxDrawChart('chart_eurcny',Object.keys(eur.rates).sort().map(k=>[k,eur.rates[k].CNY]),'#2563eb');
+      fxDrawChart('chart_usdcny',Object.keys(usd.rates).sort().map(k=>[k,usd.rates[k].CNY]),'#0d9488');
+    }catch(e){fxDrawChart('chart_eurcny',null);fxDrawChart('chart_usdcny',null);}
+    return;
+  }catch(e){}
+  try{
+    const [a,b]=await Promise.all([
+      fxFetch('https://open.er-api.com/v6/latest/EUR'),
+      fxFetch('https://open.er-api.com/v6/latest/USD')
+    ]);
+    fxSetRate('v_eurcny',a.rates.CNY);
+    fxSetRate('v_usdcny',b.rates.CNY);
+    fxSetRate('v_eurusd',a.rates.USD);
+    fxDrawChart('chart_eurcny',null);fxDrawChart('chart_usdcny',null);
+    const src=document.getElementById('fxSrc');if(src)src.textContent='数据源：ER-API · 更新于 '+(a.time_last_update_utc||'--').slice(0,16);
+  }catch(e){
+    if(err)err.innerHTML='<div style="color:#dc2626;font-size:12.5px;padding:10px 0;">汇率数据加载失败，请检查网络后点击「刷新」重试。</div>';
+  }
+}
+loadFX();
 
 load();render();
 </script>
