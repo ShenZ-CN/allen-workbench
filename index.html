@@ -504,21 +504,22 @@ function clientOf(r){return DB.clients.find(c=>c.id===r.clientId)||null;}
 /* ============================================================
    提成规则引擎 v2（Commission Engine）
    · 保持架：1 年期（仅 SOP 首年 Y1）；
-     子类属 CAGE_LOW（大TRB / 特大TRB / 机加工 / 复合机加工 / 注塑 / 铸铜铸铁）→ 基础费率 0.5%；其他子类 → 1.0%
+     子类属 CAGE_LOW（大TRB / 特大TRB / 机加工 / 复合机加工 / 铸铜铸铁）→ 基础费率 0.5%；其他子类 → 1.0%
    · 汽车零部件：3 年期，分年基础费率递减 Y1 0.6% / Y2 0.3% / Y3 0.1%
-   · EGC 映射：防尘盖 → 保持架(其他子类)规则；冲压件 → 汽车零部件规则
+   · 跨板块映射（完全套用汽车零部件 3 年递减规则）：EGC-冲压件、保持架-注塑
+   · EGC 映射：防尘盖 → 保持架(其他子类)规则（1.0% / 1 年期）
    · 每年最终提成比例 = 该年基础费率 × 客户系数 × 毛利率系数
 ============================================================ */
-/* 保持架低费率子类清单（0.5% / 1 年期）：注塑件、铸铜铸铁与大TRB系、机加工系同一规则 */
-const CAGE_LOW=['大TRB','特大TRB','机加工','复合机加工','注塑','铸铜铸铁'];
+/* 保持架低费率子类清单（0.5% / 1 年期）：铸铜铸铁与大TRB系、机加工系同一规则 */
+const CAGE_LOW=['大TRB','特大TRB','机加工','复合机加工','铸铜铸铁'];
 function commCalc(r){
   if(!r)return null;
   const client=clientOf(r);
   const seg=r.segment,sub=r.subcat,ctype=client?client.type:'新客户';
   const margin=marginOf(r);
   let yearBases;
-  if(seg==='汽车零部件'||(seg==='EGC'&&sub==='冲压件')){
-    yearBases=[0.006,0.003,0.001]; /* 汽车零部件 3 年递减 */
+  if(seg==='汽车零部件'||(seg==='EGC'&&sub==='冲压件')||(seg==='保持架'&&sub==='注塑')){
+    yearBases=[0.006,0.003,0.001]; /* 汽车零部件 3 年递减（含 EGC-冲压件、保持架-注塑 映射） */
   }else{
     /* 保持架 及 EGC-防尘盖：1 年期；CAGE_LOW 子类 0.5%，其余 1.0% */
     yearBases=[CAGE_LOW.indexOf(sub)>=0?0.005:0.01];
