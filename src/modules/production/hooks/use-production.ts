@@ -1,0 +1,1 @@
+import{useQuery}from"@tanstack/react-query";import{listProduction}from"@/modules/production/api/production-api";export const useProduction=()=>useQuery({queryKey:["production"],queryFn:listProduction});

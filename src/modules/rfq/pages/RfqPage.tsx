@@ -1,0 +1,6 @@
+import { Badge } from "@/components/ui/badge";
+import { Card,CardHeader } from "@/components/ui/card";
+import { EmptyState,ErrorState,LoadingState } from "@/components/shared/states";
+import { useRfqs } from "@/modules/rfq/hooks/use-rfqs";
+const gradeTone=(g:string|null)=>g==="A"?"green":g==="B"?"blue":g==="C"?"amber":"gray";
+export function RfqPage(){const {data,isLoading,error}=useRfqs();if(isLoading)return <LoadingState/>;if(error)return <ErrorState error={error}/>;if(!data?.length)return <EmptyState title="尚无 RFQ"/>;return <Card><CardHeader title="RFQ 商业评估" subtitle="客户价值 20% · 利润 25% · 技术 20% · 竞争 20% · 战略 15%"/><div className="overflow-auto"><table className="data-table"><thead><tr><th>RFQ / 项目</th><th>客户</th><th>阶段</th><th>零件</th><th>Score</th><th>价值等级</th><th>赢单概率</th><th>截止日</th></tr></thead><tbody>{data.map(r=><tr key={r.id}><td><b>{r.code}</b><div className="text-xs text-slate-500">{r.project_name}</div></td><td>{r.customer_name}</td><td><Badge tone="blue">{r.stage}</Badge></td><td>{r.part_count}</td><td><b>{r.score==null?"—":Math.round(r.score)}</b></td><td><Badge tone={gradeTone(r.value_grade)}>{r.value_grade??"—"}</Badge></td><td>{r.win_probability==null?"—":`${Math.round(r.win_probability)}%`}</td><td>{r.due_date??"—"}</td></tr>)}</tbody></table></div></Card>}

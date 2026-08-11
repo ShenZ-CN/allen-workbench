@@ -1,0 +1,32 @@
+project_id = "allen-automotive-business-os"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173/allen-workbench/europa-flow/"
+additional_redirect_urls = ["http://localhost:5173/**"]
+
+[storage]
+enabled = true
+
+[functions.ai-query]
+verify_jwt = true
+
+[functions.index-knowledge]
+verify_jwt = true
+
+[functions.import-legacy-data]
+verify_jwt = true

@@ -1,0 +1,2 @@
+import{getSupabase}from"@/lib/supabase";import type{KnowledgeEntry}from"@/lib/types";
+export async function listKnowledge(query=""):Promise<KnowledgeEntry[]>{let request=getSupabase().from("knowledge_library").select("*").order("updated_at",{ascending:false});if(query)request=request.textSearch("searchable_text",query,{type:"websearch",config:"simple"});const{data,error}=await request;if(error)throw error;return data as KnowledgeEntry[]}

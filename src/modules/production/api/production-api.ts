@@ -1,0 +1,1 @@
+import{getSupabase}from"@/lib/supabase";import type{ProductionOverview}from"@/lib/types";export async function listProduction():Promise<ProductionOverview[]>{const{data,error}=await getSupabase().from("production_overview").select("*").order("period",{ascending:false});if(error)throw error;return data as ProductionOverview[]}

@@ -1,0 +1,1 @@
+import{useQuery}from"@tanstack/react-query";import{listKnowledge}from"@/modules/knowledge/api/knowledge-api";export const useKnowledge=(query:string)=>useQuery({queryKey:["knowledge",query],queryFn:()=>listKnowledge(query)});

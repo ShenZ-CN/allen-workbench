@@ -1,0 +1,1 @@
+import{z}from"zod";export const projectSchema=z.object({current_stage:z.enum(["RFQ","Quotation","Technical Review","Sample","PPAP","SOP","Mass Production"]),risk_level:z.enum(["low","medium","high"]),customer_part_number:z.string().optional(),internal_part_number:z.string().optional(),sap_code:z.string().optional()});
